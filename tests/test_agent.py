@@ -26,6 +26,16 @@ def test_agent_custom_id() -> None:
     assert agent.id == "custom-id"
 
 
+def test_agent_default_model() -> None:
+    agent = Agent(name="Alice")
+    assert agent.model == "gemini-2.5-flash-lite"
+
+
+def test_agent_custom_model() -> None:
+    agent = Agent(name="Alice", model="gemini-1.0-flash-8b")
+    assert agent.model == "gemini-1.0-flash-8b"
+
+
 # --- mode choice ---
 
 OPTIONS = [

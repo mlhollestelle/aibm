@@ -47,11 +47,13 @@ class Agent:
     """A single agent in the simulation.
 
     Attributes:
-        id: Unique identifier (auto-generated if not supplied).
         name: Human-readable label.
+        model: Gemini model used for decision-making.
+        id: Unique identifier (auto-generated if not supplied).
     """
 
     name: str
+    model: str = "gemini-2.5-flash-lite"
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
 
     def __repr__(self) -> str:
@@ -98,7 +100,7 @@ class Agent:
         )
 
         response = client.models.generate_content(
-            model="gemini-2.5-flash-lite",
+            model=self.model,
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
