@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
-import random
+import json
 import uuid
 from dataclasses import dataclass, field
+
+from google import genai
+from google.genai import types
 
 
 @dataclass
@@ -24,6 +27,22 @@ class ModeOption:
 
 
 @dataclass
+class ModeChoice:
+    """The result of an LLM-powered mode choice.
+
+    Think of this as an R list with two named slots:
+    ``$option`` (the chosen ModeOption) and ``$reasoning`` (the agent's story).
+
+    Attributes:
+        option: The chosen ModeOption.
+        reasoning: A short story from the agent explaining the choice.
+    """
+
+    option: ModeOption
+    reasoning: str
+
+
+@dataclass
 class Agent:
     """A single agent in the simulation.
 
@@ -38,18 +57,65 @@ class Agent:
     def __repr__(self) -> str:
         return f"Agent(id={self.id!r}, name={self.name!r})"
 
-    def choose_mode(self, options: list[ModeOption]) -> ModeOption:
-        """Pick a travel mode at random from the available options.
+    def choose_mode(
+        self,
+        options: list[ModeOption],
+        client: genai.Client | None = None,
+    ) -> ModeChoice:
+        """Ask a Gemini LLM to pick a travel mode and explain the reasoning.
+
+        The LLM receives the agent's name and each option with its travel time,
+        then returns JSON with two fields — like a named list in R:
+        ``$reasoning`` (a short personal story) and ``$choice`` (the mode name).
 
         Args:
             options: Available modes with their travel times.
+            client: A ``genai.Client`` instance. A fresh one is created when
+                ``None`` is passed (reads ``GEMINI_API_KEY`` from the environment).
 
         Returns:
-            The chosen ModeOption.
+            A ``ModeChoice`` with the selected ``ModeOption`` and the reasoning.
 
         Raises:
             ValueError: If options is empty.
         """
         if not options:
             raise ValueError("options must contain at least one ModeOption")
-        return random.choice(options)
+
+        if client is None:
+            client = genai.Client()
+
+        options_text = "\n".join(
+            f"- {opt.mode}: {opt.travel_time} minutes" for opt in options
+        )
+        prompt = (
+            f"You are {self.name}, deciding how to travel today.\n"
+            f"Available options:\n{options_text}\n\n"
+            "Pick exactly one mode. Respond with:\n"
+            '- "reasoning": a short personal story (2-3 sentences) explaining'
+            " your choice.\n"
+            '- "choice": the mode name exactly as listed above.'
+        )
+
+        response = client.models.generate_content(
+            model="gemini-2.5-flash-lite",
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema={
+                    "type": "object",
+                    "properties": {
+                        "reasoning": {"type": "string"},
+                        "choice": {"type": "string"},
+                    },
+                    "required": ["reasoning", "choice"],
+                },
+            ),
+        )
+
+        if response.text is None:
+            raise ValueError("LLM returned an empty response")
+        data = json.loads(response.text)
+        chosen_name: str = data["choice"]
+        chosen_option = next(opt for opt in options if opt.mode == chosen_name)
+        return ModeChoice(option=chosen_option, reasoning=data["reasoning"])

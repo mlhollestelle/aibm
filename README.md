@@ -1,5 +1,15 @@
 # aibm
 
+## Prerequisites
+
+This project uses the [Gemini API](https://aistudio.google.com/) to power agent decisions. You need an API key set in your environment before running the model.
+
+```sh
+export GEMINI_API_KEY=your_key_here
+```
+
+To make this permanent, add the line to your shell config (e.g. `~/.bashrc` or `~/.zshrc`).
+
 ## Get started
 
 Install the package in editable mode with dev tools:

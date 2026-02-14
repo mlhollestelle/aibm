@@ -1,6 +1,8 @@
+from unittest.mock import MagicMock
+
 import pytest
 
-from aibm.agent import Agent, ModeOption
+from aibm.agent import Agent, ModeChoice, ModeOption
 
 
 def test_agent_has_name() -> None:
@@ -33,19 +35,50 @@ OPTIONS = [
 ]
 
 
-def test_choose_mode_returns_a_mode_option() -> None:
-    agent = Agent(name="Alice")
-    chosen = agent.choose_mode(OPTIONS)
-    assert isinstance(chosen, ModeOption)
+def _mock_client(choice: str, reasoning: str) -> MagicMock:
+    """Build a fake genai.Client that returns a fixed JSON response."""
+    mock = MagicMock()
+    mock.models.generate_content.return_value.text = (
+        f'{{"reasoning": "{reasoning}", "choice": "{choice}"}}'
+    )
+    return mock
 
 
-def test_choose_mode_is_one_of_the_options() -> None:
+def test_choose_mode_returns_a_mode_choice() -> None:
     agent = Agent(name="Alice")
-    chosen = agent.choose_mode(OPTIONS)
-    assert chosen in OPTIONS
+    result = agent.choose_mode(OPTIONS, client=_mock_client("car", "Car is fastest."))
+    assert isinstance(result, ModeChoice)
+
+
+def test_choose_mode_option_is_one_of_the_options() -> None:
+    agent = Agent(name="Alice")
+    result = agent.choose_mode(OPTIONS, client=_mock_client("bike", "I like cycling."))
+    assert result.option in OPTIONS
+
+
+def test_choose_mode_returns_correct_option() -> None:
+    agent = Agent(name="Alice")
+    result = agent.choose_mode(
+        OPTIONS, client=_mock_client("transit", "Bus is relaxing.")
+    )
+    assert result.option.mode == "transit"
+
+
+def test_choose_mode_includes_reasoning() -> None:
+    agent = Agent(name="Alice")
+    result = agent.choose_mode(OPTIONS, client=_mock_client("car", "Car is fastest."))
+    assert result.reasoning == "Car is fastest."
+
+
+def test_choose_mode_raises_on_empty_llm_response() -> None:
+    agent = Agent(name="Alice")
+    mock = MagicMock()
+    mock.models.generate_content.return_value.text = None
+    with pytest.raises(ValueError, match="empty response"):
+        agent.choose_mode(OPTIONS, client=mock)
 
 
 def test_choose_mode_raises_on_empty_options() -> None:
     agent = Agent(name="Alice")
     with pytest.raises(ValueError, match="at least one"):
-        agent.choose_mode([])
+        agent.choose_mode([], client=_mock_client("car", ""))
