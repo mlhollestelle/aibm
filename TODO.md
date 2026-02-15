@@ -5,6 +5,20 @@ Items are grouped by theme. Dependencies are listed per item.
 
 **Already done:** `Agent` (with `choose_mode`), `Household` (membership management).
 
+## Decision model
+
+LLM calls replace statistical models throughout. Decisions split into two
+categories:
+
+| Timing | Examples | When called |
+|---|---|---|
+| **Long-term** | persona, work/school location | Once during population synthesis |
+| **Short-term** | activities, destinations, schedule, mode | Every simulated day |
+
+Long-term choices are stored on the agent and fed as context into every
+short-term prompt, so daily decisions stay consistent with the agent's
+identity.
+
 ---
 
 ## A. Core data structures
@@ -41,12 +55,12 @@ Items are grouped by theme. Dependencies are listed per item.
 
 ---
 
-## B. Agent demographics
+## B. Agent and Household demographics
 
 ### B1. Add demographic attributes to `Agent`
 - **Depends on:** nothing
 - **File:** `src/aibm/agent.py`
-- **Consider:** Add fields: `age: int`, `employment: str` (employed, student, retired, unemployed), `has_license: bool`, `home_zone: str | None`, `work_zone: str | None`. All optional with sensible defaults. These attributes will be injected into every LLM prompt so the agent makes realistic decisions.
+- **Consider:** Add fields: `age: int`, `employment: str` (employed, student, retired, unemployed), `has_license: bool`, `home_zone: str | None`, `work_zone: str | None`, `school_zone: str | None`, `persona: str | None`. All optional with sensible defaults. `work_zone`, `school_zone`, and `persona` are populated during synthesis (see S2), not set manually. These attributes are injected into every LLM prompt so the agent makes realistic, consistent decisions.
 - **Done when:** fields exist with defaults, existing tests still pass, new test confirms demographics are set correctly.
 
 ### B2. Add demographic attributes to `Household`
@@ -57,32 +71,58 @@ Items are grouped by theme. Dependencies are listed per item.
 
 ---
 
-## C. Activity generation
+## S. Population synthesis
+
+Input data: zone-level demographic aggregates (census or similar) + zones
+from OSM. Hard attributes are sampled with `random`; behavioural profile
+and long-term location choices are LLM-generated.
+
+### S1. `synthesize_population()` — sample hard attributes
+- **Depends on:** A5, B1, B2
+- **File:** `src/aibm/synthesis.py`
+- **Consider:** Input: a list of zone configs, each with `zone_id`, `n_households`, `household_size_dist` (weights per size), `age_dist` (weights per bracket), `employment_rate`, `vehicle_dist` (weights per count), `income_dist`. Use `random.choices` with a `seed` parameter for reproducibility. For each zone: sample `n_households`, for each household sample size, then sample members with age bracket and employment status. Assign `home_zone` from the household's zone. Do not set `work_zone`, `school_zone`, or `persona` yet — that happens in S2.
+- **Done when:** function returns `list[Household]` with correctly attributed agents, distributions roughly match inputs over a large sample, tested with a fixed seed for deterministic output.
+
+### S2. `Agent.generate_persona()` — LLM long-term choices
+- **Depends on:** S1, A5
+- **File:** `src/aibm/agent.py`
+- **Consider:** Single LLM call per agent that produces both a persona and work/school zone choice. Prompt receives: agent demographics (age, employment, license), home zone description, household context (size, income, vehicles), and a list of candidate zones with names, distances from home, and land-use/POI summaries. Response schema: `{"persona": str, "work_zone": str | null, "school_zone": str | null, "reasoning": str}`. `work_zone` is only expected when employed, `school_zone` only when student. The persona is a 2-3 sentence behavioural profile (travel preferences, daily habits). Store all fields on the Agent. Combining persona and location in one call keeps them self-consistent and halves API calls.
+- **Done when:** method sets `persona`, `work_zone`/`school_zone` on the agent, tested with mocked LLM, returns null zones for retired/unemployed agents.
+
+### S3. `synthesize_and_enrich()` — full pipeline helper
+- **Depends on:** S1, S2
+- **File:** `src/aibm/synthesis.py`
+- **Consider:** Convenience function that calls `synthesize_population()` then `generate_persona()` for every agent. Accepts an optional `genai.Client` for LLM calls. Consider progress logging (agent count can be large). This is the single entry point for creating a ready-to-simulate population.
+- **Done when:** function returns fully enriched households, tested end-to-end with mocked LLM.
+
+---
+
+## C. Activity generation (short-term)
 
 ### C1. `Agent.generate_activities()`
-- **Depends on:** A1, B1
+- **Depends on:** A1, B1, S2
 - **File:** `src/aibm/agent.py`
-- **Consider:** LLM-powered method, same pattern as `choose_mode`. Prompt includes agent demographics (age, employment). Returns `list[Activity]`. Mandatory activities (work for employed, school for students) should always appear; the LLM decides on discretionary ones (shopping, leisure). Define a response schema with a list of activity dicts. Start without zones — use activity type only.
+- **Consider:** LLM-powered method, same pattern as `choose_mode`. Prompt includes agent demographics, persona, and long-term zones. Returns `list[Activity]`. Mandatory activities (work for employed, school for students) should always appear; the LLM decides on discretionary ones (shopping, leisure). Define a response schema with a list of activity dicts. Work/school activities get their location pre-filled from `work_zone`/`school_zone`.
 - **Done when:** method returns a `list[Activity]`, tested with mocked LLM response, mandatory activities appear for relevant employment types.
 
 ---
 
-## D. Destination choice
+## D. Destination choice (short-term)
 
 ### D1. `Agent.choose_destination()`
 - **Depends on:** A1, A5, C1
 - **File:** `src/aibm/agent.py`
-- **Consider:** For each flexible activity (not work/school which have fixed zones), the LLM picks a destination zone from a provided list of candidate zones. Input: one `Activity` + `list[Zone]`. Output: updated `Activity` with `location` set. Prompt should include zone names and land-use info. Work/school activities skip this — their location comes from agent attributes.
+- **Consider:** For each flexible activity (not work/school which have fixed zones), the LLM picks a destination zone from a provided list of candidate zones. Input: one `Activity` + `list[Zone]`. Output: updated `Activity` with `location` set. Prompt should include agent persona, zone names, and land-use info. Work/school activities skip this — their location comes from the long-term choice in S2.
 - **Done when:** method sets location on a flexible activity, tested with mock, raises if candidates list is empty.
 
 ---
 
-## E. Scheduling
+## E. Scheduling (short-term)
 
 ### E1. `Agent.schedule_activities()`
 - **Depends on:** A1, A4, C1
 - **File:** `src/aibm/agent.py`
-- **Consider:** Takes the unordered `list[Activity]` from `generate_activities` and returns a time-ordered `DayPlan` with `start_time` / `end_time` filled in. The LLM decides ordering and timing. Prompt should mention constraints: work hours are roughly fixed, other activities fill gaps. Response schema: list of activities with times, sorted chronologically.
+- **Consider:** Takes the unordered `list[Activity]` from `generate_activities` and returns a time-ordered `DayPlan` with `start_time` / `end_time` filled in. The LLM decides ordering and timing. Prompt should include persona and mention constraints: work hours are roughly fixed, other activities fill gaps. Response schema: list of activities with times, sorted chronologically.
 - **Done when:** method returns a `DayPlan` with activities sorted by `start_time`, tested with mock.
 
 ---
@@ -98,7 +138,7 @@ Items are grouped by theme. Dependencies are listed per item.
 ### F2. Integrate `choose_mode` into tour building
 - **Depends on:** F1
 - **File:** `src/aibm/agent.py`
-- **Consider:** For each `Trip` in each tour, call the existing `choose_mode` to select a mode and fill in `trip.mode`. The `ModeOption` list may come from a config or be computed per trip (e.g., transit only available for certain zones). Consider whether to batch all trips in one LLM call or call per trip — start with per-trip for simplicity.
+- **Consider:** For each `Trip` in each tour, call the existing `choose_mode` to select a mode and fill in `trip.mode`. Prompt should include agent persona for consistent choices. The `ModeOption` list may come from a config or be computed per trip (e.g., transit only available for certain zones). Consider whether to batch all trips in one LLM call or call per trip — start with per-trip for simplicity.
 - **Done when:** every trip in a tour has a mode assigned, tested with mock.
 
 ---
@@ -114,7 +154,7 @@ Items are grouped by theme. Dependencies are listed per item.
 ### G2. `Household.generate_joint_activities()`
 - **Depends on:** A1, B2, C1
 - **File:** `src/aibm/household.py`
-- **Consider:** LLM-powered. Some activities are shared (e.g., family grocery trip, school drop-off). Prompt receives household composition (members + demographics). Returns activities that should appear in multiple members' plans with the same time and location. Start simple: only produce joint shopping or escort trips.
+- **Consider:** LLM-powered. Some activities are shared (e.g., family grocery trip, school drop-off). Prompt receives household composition (members + demographics + personas). Returns activities that should appear in multiple members' plans with the same time and location. Start simple: only produce joint shopping or escort trips.
 - **Done when:** method returns activities linked to multiple members, tested with mock.
 
 ---
@@ -122,15 +162,15 @@ Items are grouped by theme. Dependencies are listed per item.
 ## H. Model orchestrator
 
 ### H1. `Model` class with population loading
-- **Depends on:** B1, B2, A5
+- **Depends on:** B1, B2, A5, S3
 - **File:** `src/aibm/model.py`
-- **Consider:** Top-level class. Fields: `households: list[Household]`, `zones: list[Zone]`. Add a `load_population()` class method or factory that reads from a simple data format (list of dicts / JSON). Also `load_zones()`. Keep file I/O separate from logic — accept dicts, not file paths directly.
-- **Done when:** `Model` can be constructed with households and zones, tested with small sample data.
+- **Consider:** Top-level class. Fields: `households: list[Household]`, `zones: list[Zone]`. Provide two construction paths: (1) `from_config()` that takes zone configs and calls `synthesize_and_enrich()` to generate the population, (2) direct construction with pre-built households/zones. Also `load_zones()` for reading zone data. Keep file I/O separate from logic — accept dicts, not file paths directly.
+- **Done when:** `Model` can be constructed both ways, tested with small sample data.
 
 ### H2. `Model.run_day()`
 - **Depends on:** H1, C1, D1, E1, F1, F2, G1
 - **File:** `src/aibm/model.py`
-- **Consider:** Orchestrates the full pipeline for all agents: generate activities, choose destinations, schedule, build tours, choose modes, allocate vehicles. Calls methods in the right order. Returns a list of all `DayPlan` objects. Consider logging/progress output. Handle LLM errors gracefully (skip agent on failure, log warning).
+- **Consider:** Orchestrates the full short-term pipeline for all agents: generate activities, choose destinations, schedule, build tours, choose modes, allocate vehicles. Calls methods in the right order. Returns a list of all `DayPlan` objects. Consider logging/progress output. Handle LLM errors gracefully (skip agent on failure, log warning).
 - **Done when:** method runs the full pipeline on a 2-household test population with mocked LLM, produces day plans.
 
 ### H3. `Model.collect_results()`
@@ -144,27 +184,32 @@ Items are grouped by theme. Dependencies are listed per item.
 ## Dependency graph
 
 ```
-A1 ──────────┬──→ C1 ──→ D1 ──→ E1 ──→ F1 ──→ F2
-             │              ↑         ↗        │
-A5 ──→ B2 ──┤         A5 ──┘    A2,A3          │
-             │                     ↑            │
-B1 ──────────┤                     A4 ←─────────┘
-             │                                  │
-             └──→ G1 ←── A4                     │
-             └──→ G2 ←── C1                     │
-                                                │
-H1 ←── B1, B2, A5                              │
-H2 ←── H1, C1, D1, E1, F1, F2, G1             │
-H3 ←── H2                                      │
+A5 ──┬──→ B2 ──→ S1 ──→ S2 ──→ S3
+     │           ↗                │
+B1 ──┴──────────┘                 │
+                                  ▼
+A1 ──→ C1 ──→ D1 ──→ E1 ──→ F1 ──→ F2
+               ↑         ↗
+          A5 ──┘    A2,A3
+                      ↑
+                      A4
+
+G1 ←── B2, A4
+G2 ←── A1, B2, C1
+
+H1 ←── B1, B2, A5, S3
+H2 ←── H1, C1, D1, E1, F1, F2, G1
+H3 ←── H2
 ```
 
 ## Recommended build order
 
 1. **A1** → A2 → A5 → A3 → A4 (data structures first)
-2. **B1** → B2 (demographics)
-3. **C1** (activity generation)
-4. **D1** (destination choice)
-5. **E1** (scheduling)
-6. **F1** → F2 (trips and tours)
-7. **G1** → G2 (household coordination)
-8. **H1** → H2 → H3 (orchestrator)
+2. **B1** → B2 (demographic fields)
+3. **S1** → S2 → S3 (population synthesis)
+4. **C1** (activity generation)
+5. **D1** (destination choice)
+6. **E1** (scheduling)
+7. **F1** → F2 (trips and tours)
+8. **G1** → G2 (household coordination)
+9. **H1** → H2 → H3 (orchestrator)
