@@ -14,9 +14,9 @@ class DayPlan:
     """The complete day for a single agent: activities and the tours they form.
 
     Attributes:
-        activities: Ordered list of :class:`Activity` objects for the day.
+        activities: Ordered list of Activity objects for the day.
             Populated by ``schedule_activities``.
-        tours: List of :class:`Tour` objects built from the activities.
+        tours: List of Tour objects built from the activities.
             Populated by ``build_tours``.
     """
 
