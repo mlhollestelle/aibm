@@ -202,6 +202,14 @@ H2 ←── H1, C1, D1, E1, F1, F2, G1
 H3 ←── H2
 ```
 
+## Optional / future considerations
+
+### OPT-1. `Mode` dataclass
+- **Depends on:** A2
+- **Consider:** Currently mode is a plain `str` inside `ModeOption`. If modes grow their own fixed attributes — such as `requires_car: bool`, `cost_per_km: float`, `emissions_per_km: float` — it is worth extracting a dedicated `Mode` dataclass. `ModeOption.mode` would then reference a `Mode` object instead of a string, and richer mode descriptions could be injected into LLM prompts (e.g., "transit: 32 min, €1.50, low emissions"). No action needed until a second mode attribute is required.
+
+---
+
 ## Recommended build order
 
 1. **A1** → A2 → A5 → A3 → A4 (data structures first)
