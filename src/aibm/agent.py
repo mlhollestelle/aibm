@@ -30,9 +30,6 @@ class ModeOption:
 class ModeChoice:
     """The result of an LLM-powered mode choice.
 
-    Think of this as an R list with two named slots:
-    ``$option`` (the chosen ModeOption) and ``$reasoning`` (the agent's story).
-
     Attributes:
         option: The chosen ModeOption.
         reasoning: A short story from the agent explaining the choice.
@@ -67,8 +64,8 @@ class Agent:
         """Ask a Gemini LLM to pick a travel mode and explain the reasoning.
 
         The LLM receives the agent's name and each option with its travel time,
-        then returns JSON with two fields — like a named list in R:
-        ``$reasoning`` (a short personal story) and ``$choice`` (the mode name).
+        then returns JSON with two fields:
+        ``reasoning`` (a short personal story) and ``choice`` (the mode name).
 
         Args:
             options: Available modes with their travel times.

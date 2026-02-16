@@ -10,7 +10,7 @@ This project is a work in progress where someone not experienced with Python bui
 ## During development
 
 * Guide the developer through python best practices.
-* Explain new concepts of the developer through concepts in R.
+* Explain new concepts of the developer through concepts in R (in chat, not in comments/function docs).
 * Do not generate large amounts of it at once, so that the developer can follow and learn
 * Make sure best practices are followed.
 
