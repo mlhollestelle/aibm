@@ -26,7 +26,7 @@ identity.
 ### A1. `Activity` dataclass
 - **Depends on:** nothing
 - **File:** `src/aibm/activity.py`
-- **Consider:** Fields needed: `type` (work, school, shopping, leisure, etc.), `location` (zone id or coordinates), `start_time`, `end_time`, `is_flexible` (fixed vs. flexible timing). Keep it simple — no behaviour, just data. Follow the pattern of `ModeOption`.
+- **Consider:** Fields needed: `type` (work, school, shopping, leisure, etc.), `location` (zone id or coordinates), `start_time`, `end_time`, `is_flexible` (fixed vs. flexible timing). All fields except `type` default to `None` — `location` is filled in by D1 (`choose_destination`), and `start_time`/`end_time` are filled in by E1 (`schedule_activities`). Work and school activities are the exception: their `location` is set directly from `work_zone`/`school_zone` and skip D1. Keep it simple — no behaviour, just data. Follow the pattern of `ModeOption`.
 - **Done when:** dataclass exists, `__init__` works, at least one test confirms field assignment.
 
 ### A2. `Trip` dataclass
