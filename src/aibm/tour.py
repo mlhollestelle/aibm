@@ -17,8 +17,8 @@ class Tour:
     and a clear end (arrive back home).
 
     Attributes:
-        trips: Ordered list of :class:`Trip` objects in this tour.
-        home_zone: Zone id of the agent's home.  Used by :attr:`is_closed`
+        trips: Ordered list of Trip objects in this tour.
+        home_zone: Zone id of the agent's home.  Used by ``is_closed``
             to check whether the final trip returns home.
     """
 
@@ -34,7 +34,7 @@ class Tour:
 
     @property
     def is_closed(self) -> bool:
-        """``True`` when the last trip ends back at :attr:`home_zone`.
+        """``True`` when the last trip ends back at ``home_zone``.
 
         Returns ``False`` when there are no trips or ``home_zone`` is not set.
         """
