@@ -36,6 +36,47 @@ def test_agent_custom_model() -> None:
     assert agent.model == "gemini-1.0-flash-8b"
 
 
+# --- demographic attributes ---
+
+
+def test_agent_default_demographics() -> None:
+    agent = Agent(name="Alice")
+    assert agent.age == 0
+    assert agent.employment == "unemployed"
+    assert agent.has_license is False
+    assert agent.home_zone is None
+    assert agent.work_zone is None
+    assert agent.school_zone is None
+    assert agent.persona is None
+
+
+def test_agent_custom_demographics() -> None:
+    agent = Agent(
+        name="Bob",
+        age=35,
+        employment="employed",
+        has_license=True,
+        home_zone="zone_1",
+        work_zone="zone_2",
+        school_zone=None,
+        persona="Prefers cycling to work on sunny days.",
+    )
+    assert agent.age == 35
+    assert agent.employment == "employed"
+    assert agent.has_license is True
+    assert agent.home_zone == "zone_1"
+    assert agent.work_zone == "zone_2"
+    assert agent.school_zone is None
+    assert agent.persona == "Prefers cycling to work on sunny days."
+
+
+def test_agent_student_demographics() -> None:
+    agent = Agent(name="Carol", age=16, employment="student", school_zone="zone_3")
+    assert agent.employment == "student"
+    assert agent.school_zone == "zone_3"
+    assert agent.work_zone is None
+
+
 # --- mode choice ---
 
 OPTIONS = [
