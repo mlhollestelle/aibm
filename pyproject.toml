@@ -20,9 +20,15 @@ dev = [
     "mypy>=1.14",
     "pre-commit>=4.0",
 ]
+synth_pop = [
+    "osmnx>=2.0",
+    "geopandas>=1.0",
+    "shapely>=2.0",
+    "pandas>=2.0",
+]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/aibm"]
+packages = ["src/aibm", "src/synth_pop"]
 
 [tool.ruff]
 line-length = 88

@@ -42,3 +42,25 @@ Activate pre-commit hooks (runs ruff automatically on every `git commit`):
 ```sh
 uv run pre-commit install
 ```
+
+## Synthetic population
+
+The `synth_pop` package generates a synthetic population (buildings → households → persons) from OpenStreetMap data. Install its dependencies with:
+
+```sh
+uv sync --extra dev --extra synth_pop
+```
+
+Run the pipeline for Veere:
+
+```sh
+uv run python scripts/generate_synth_pop.py
+```
+
+Outputs are written to `data/` (gitignored):
+
+| File | Contents |
+|---|---|
+| `data/households.csv` | household_id, building_osmid, centroid_x, centroid_y |
+| `data/persons.csv` | person_id, household_id, age |
+| `data/buildings.gpkg` | Building polygons, EPSG:28992 |
