@@ -17,3 +17,7 @@ This project is a work in progress where someone not experienced with Python bui
 ## Python
 
 * When adding a function, always add at least one test too.
+
+## Git
+
+* Always make atomic commits that are not too big.
