@@ -57,13 +57,13 @@ identity.
 
 ## B. Agent and Household demographics
 
-### B1. Add demographic attributes to `Agent`
+### B1. Add demographic attributes to `Agent` —> DONE
 - **Depends on:** nothing
 - **File:** `src/aibm/agent.py`
 - **Consider:** Add fields: `age: int`, `employment: str` (employed, student, retired, unemployed), `has_license: bool`, `home_zone: str | None`, `work_zone: str | None`, `school_zone: str | None`, `persona: str | None`. All optional with sensible defaults. `work_zone`, `school_zone`, and `persona` are populated during synthesis (see S2), not set manually. These attributes are injected into every LLM prompt so the agent makes realistic, consistent decisions.
 - **Done when:** fields exist with defaults, existing tests still pass, new test confirms demographics are set correctly.
 
-### B2. Add demographic attributes to `Household`
+### B2. Add demographic attributes to `Household` —> DONE
 - **Depends on:** B1, A5
 - **File:** `src/aibm/household.py`
 - **Consider:** Add fields: `home_zone: str`, `num_vehicles: int`, `income_level: str` (low, medium, high). When a household gets a `home_zone`, its members should share that zone. Decide whether `home_zone` is set on the household and propagated to agents, or set independently.
