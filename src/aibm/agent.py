@@ -14,9 +14,6 @@ from google.genai import types
 class ModeOption:
     """One row of mode-choice input data.
 
-    Think of a list[ModeOption] as an R data.frame with columns
-    ``mode`` and ``travel_time``.
-
     Attributes:
         mode: Name of the travel mode (e.g. "car", "bike", "transit").
         travel_time: Travel time in minutes for this mode.
