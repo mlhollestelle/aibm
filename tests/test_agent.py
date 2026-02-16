@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from aibm.agent import Agent, ModeChoice, ModeOption
+from aibm.household import Household
 
 
 def test_agent_has_name() -> None:
@@ -133,3 +134,58 @@ def test_choose_mode_raises_on_empty_options() -> None:
     agent = Agent(name="Alice")
     with pytest.raises(ValueError, match="at least one"):
         agent.choose_mode([], client=_mock_client("car", ""))
+
+
+# --- prompt includes background ---
+
+
+def test_choose_mode_prompt_includes_agent_demographics() -> None:
+    agent = Agent(
+        name="Bob",
+        age=42,
+        employment="employed",
+        has_license=True,
+        home_zone="zone_1",
+        work_zone="zone_2",
+        persona="Enjoys quiet commutes.",
+    )
+    mock = _mock_client("car", "Driving is convenient.")
+    agent.choose_mode(OPTIONS, client=mock)
+
+    prompt = mock.models.generate_content.call_args.kwargs["contents"]
+    assert "Age: 42" in prompt
+    assert "Employment: employed" in prompt
+    assert "Has driving licence: yes" in prompt
+    assert "Home zone: zone_1" in prompt
+    assert "Work zone: zone_2" in prompt
+    assert "Persona: Enjoys quiet commutes." in prompt
+
+
+def test_choose_mode_prompt_includes_household_context() -> None:
+    agent = Agent(name="Carol", age=30, employment="employed", has_license=True)
+    hh = Household(
+        members=[agent],
+        home_zone="zone_3",
+        num_vehicles=2,
+        income_level="high",
+    )
+    mock = _mock_client("car", "We have two cars.")
+    agent.choose_mode(OPTIONS, client=mock, household=hh)
+
+    prompt = mock.models.generate_content.call_args.kwargs["contents"]
+    assert "Household vehicles: 2" in prompt
+    assert "Household income: high" in prompt
+
+
+def test_choose_mode_prompt_omits_unset_optional_fields() -> None:
+    agent = Agent(name="Dave")
+    mock = _mock_client("bike", "Cycling is fun.")
+    agent.choose_mode(OPTIONS, client=mock)
+
+    prompt = mock.models.generate_content.call_args.kwargs["contents"]
+    assert "Age:" not in prompt  # age == 0 is omitted
+    assert "Home zone:" not in prompt
+    assert "Work zone:" not in prompt
+    assert "School zone:" not in prompt
+    assert "Persona:" not in prompt
+    assert "Household" not in prompt

@@ -5,9 +5,13 @@ from __future__ import annotations
 import json
 import uuid
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from google import genai
 from google.genai import types
+
+if TYPE_CHECKING:
+    from aibm.household import Household
 
 
 @dataclass
@@ -68,21 +72,45 @@ class Agent:
     def __repr__(self) -> str:
         return f"Agent(id={self.id!r}, name={self.name!r})"
 
+    def _build_background(self, household: Household | None = None) -> str:
+        """Build a background description from agent and household attributes."""
+        lines: list[str] = []
+        if self.age > 0:
+            lines.append(f"Age: {self.age}")
+        lines.append(f"Employment: {self.employment}")
+        lines.append(f"Has driving licence: {'yes' if self.has_license else 'no'}")
+        if self.home_zone:
+            lines.append(f"Home zone: {self.home_zone}")
+        if self.work_zone:
+            lines.append(f"Work zone: {self.work_zone}")
+        if self.school_zone:
+            lines.append(f"School zone: {self.school_zone}")
+        if self.persona:
+            lines.append(f"Persona: {self.persona}")
+        if household is not None:
+            lines.append(f"Household vehicles: {household.num_vehicles}")
+            lines.append(f"Household income: {household.income_level}")
+        return "\n".join(lines)
+
     def choose_mode(
         self,
         options: list[ModeOption],
         client: genai.Client | None = None,
+        household: Household | None = None,
     ) -> ModeChoice:
         """Ask a Gemini LLM to pick a travel mode and explain the reasoning.
 
-        The LLM receives the agent's name and each option with its travel time,
-        then returns JSON with two fields:
-        ``reasoning`` (a short personal story) and ``choice`` (the mode name).
+        The LLM receives the agent's background (demographics, household
+        context) and each option with its travel time, then returns JSON
+        with two fields: ``reasoning`` (a short personal story) and
+        ``choice`` (the mode name).
 
         Args:
             options: Available modes with their travel times.
             client: A ``genai.Client`` instance. A fresh one is created when
                 ``None`` is passed (reads ``GEMINI_API_KEY`` from the environment).
+            household: Optional household that supplies vehicle count and
+                income level for richer decision context.
 
         Returns:
             A ``ModeChoice`` with the selected ``ModeOption`` and the reasoning.
@@ -96,11 +124,13 @@ class Agent:
         if client is None:
             client = genai.Client()
 
+        background = self._build_background(household)
         options_text = "\n".join(
             f"- {opt.mode}: {opt.travel_time} minutes" for opt in options
         )
         prompt = (
             f"You are {self.name}, deciding how to travel today.\n"
+            f"Background:\n{background}\n\n"
             f"Available options:\n{options_text}\n\n"
             "Pick exactly one mode. Respond with:\n"
             '- "reasoning": a short personal story (2-3 sentences) explaining'
