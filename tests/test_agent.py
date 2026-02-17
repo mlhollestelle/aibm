@@ -5,6 +5,7 @@ import pytest
 
 from aibm.activity import Activity
 from aibm.agent import Agent, ModeChoice, ModeOption
+from aibm.day_plan import DayPlan
 from aibm.household import Household
 from aibm.zone import Zone
 
@@ -375,3 +376,61 @@ def test_choose_destination_prompt_contains_zone_names() -> None:
     prompt = mock.models.generate_content.call_args.kwargs["contents"]
     assert "City Centre" in prompt
     assert "Suburb North" in prompt
+
+
+# --- schedule activities ---
+
+
+def _mock_schedule_client(schedule: list[dict]) -> MagicMock:
+    """Build a fake genai.Client that returns a fixed schedule JSON response."""
+    mock = MagicMock()
+    mock.models.generate_content.return_value.text = json.dumps({"schedule": schedule})
+    return mock
+
+
+def test_schedule_activities_returns_day_plan() -> None:
+    agent = Agent(name="Alice", age=30, employment="employed")
+    activities = [Activity(type="work", is_flexible=False)]
+    mock = _mock_schedule_client(
+        [{"type": "work", "start_time": 480, "end_time": 1020}]
+    )
+    result = agent.schedule_activities(activities, client=mock)
+    assert isinstance(result, DayPlan)
+
+
+def test_schedule_activities_sorted_by_start_time() -> None:
+    agent = Agent(name="Bob", age=35, employment="employed")
+    activities = [
+        Activity(type="shopping", is_flexible=True),
+        Activity(type="work", is_flexible=False),
+    ]
+    mock = _mock_schedule_client(
+        [
+            {"type": "work", "start_time": 480, "end_time": 1020},
+            {"type": "shopping", "start_time": 1080, "end_time": 1140},
+        ]
+    )
+    result = agent.schedule_activities(activities, client=mock)
+    start_times = [a.start_time for a in result.activities]
+    assert start_times == sorted(start_times)
+
+
+def test_schedule_activities_sets_times_on_activities() -> None:
+    agent = Agent(name="Carol", age=25, employment="student")
+    activities = [Activity(type="school", is_flexible=False)]
+    mock = _mock_schedule_client(
+        [{"type": "school", "start_time": 480, "end_time": 900}]
+    )
+    result = agent.schedule_activities(activities, client=mock)
+    scheduled = result.activities[0]
+    assert scheduled.start_time == 480
+    assert scheduled.end_time == 900
+
+
+def test_schedule_activities_empty_input_returns_empty_plan() -> None:
+    agent = Agent(name="Dave", age=67, employment="retired")
+    mock = MagicMock()
+    result = agent.schedule_activities([], client=mock)
+    assert isinstance(result, DayPlan)
+    assert result.activities == []
+    mock.models.generate_content.assert_not_called()
