@@ -11,6 +11,7 @@ from google import genai
 from google.genai import types
 
 from aibm.activity import Activity
+from aibm.day_plan import DayPlan
 from aibm.zone import Zone
 
 if TYPE_CHECKING:
@@ -362,3 +363,89 @@ class Agent:
         data = json.loads(response.text)
         activity.location = data["zone_id"]
         return activity
+
+    def schedule_activities(
+        self,
+        activities: list[Activity],
+        client: genai.Client | None = None,
+    ) -> DayPlan:
+        """Ask the LLM to assign start and end times to a list of activities.
+
+        Activities are returned sorted by ``start_time`` inside a ``DayPlan``.
+        An empty input list short-circuits and returns an empty ``DayPlan``
+        without calling the LLM.
+
+        Args:
+            activities: Activities to be scheduled (order does not matter).
+            client: A ``genai.Client`` instance. A fresh one is created when
+                ``None`` is passed (reads ``GEMINI_API_KEY`` from the
+                environment).
+
+        Returns:
+            A ``DayPlan`` whose ``activities`` list is sorted by
+            ``start_time``.
+        """
+        if not activities:
+            return DayPlan(activities=[])
+
+        if client is None:
+            client = genai.Client()
+
+        background = self._build_background()
+        activities_text = "\n".join(
+            f"- {a.type} "
+            f"(flexible: {'yes' if a.is_flexible else 'no'}, "
+            f"location: {a.location})"
+            for a in activities
+        )
+        prompt = (
+            f"You are {self.name}, scheduling your day.\n"
+            f"Background:\n{background}\n\n"
+            f"Activities to schedule:\n{activities_text}\n\n"
+            "Assign a start_time and end_time (in minutes from midnight, "
+            "e.g. 480 = 08:00) to each activity. "
+            "Fixed activities have realistic fixed hours; flexible ones fill "
+            "the remaining time. Return them in chronological order."
+        )
+
+        response = client.models.generate_content(
+            model=self.model,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema={
+                    "type": "object",
+                    "properties": {
+                        "schedule": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "type": {"type": "string"},
+                                    "start_time": {"type": "number"},
+                                    "end_time": {"type": "number"},
+                                },
+                                "required": ["type", "start_time", "end_time"],
+                            },
+                        }
+                    },
+                    "required": ["schedule"],
+                },
+            ),
+        )
+
+        if response.text is None:
+            raise ValueError("LLM returned an empty response")
+        data = json.loads(response.text)
+
+        for item in data["schedule"]:
+            for activity in activities:
+                if activity.type == item["type"]:
+                    activity.start_time = item["start_time"]
+                    activity.end_time = item["end_time"]
+                    break
+
+        sorted_activities = sorted(
+            activities, key=lambda a: a.start_time if a.start_time is not None else 0
+        )
+        return DayPlan(activities=sorted_activities)

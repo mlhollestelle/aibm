@@ -119,7 +119,7 @@ and long-term location choices are LLM-generated.
 
 ## E. Scheduling (short-term)
 
-### E1. `Agent.schedule_activities()`
+### E1. `Agent.schedule_activities()` --> DONE
 - **Depends on:** A1, A4, C1
 - **File:** `src/aibm/agent.py`
 - **Consider:** Takes the unordered `list[Activity]` from `generate_activities` and returns a time-ordered `DayPlan` with `start_time` / `end_time` filled in. The LLM decides ordering and timing. Prompt should include persona and mention constraints: work hours are roughly fixed, other activities fill gaps. Response schema: list of activities with times, sorted chronologically.
