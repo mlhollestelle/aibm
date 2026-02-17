@@ -1,7 +1,9 @@
+import json
 from unittest.mock import MagicMock
 
 import pytest
 
+from aibm.activity import Activity
 from aibm.agent import Agent, ModeChoice, ModeOption
 from aibm.household import Household
 
@@ -251,3 +253,60 @@ def test_choose_mode_prompt_omits_unset_optional_fields() -> None:
     assert "School zone:" not in prompt
     assert "Persona:" not in prompt
     assert "Household" not in prompt
+
+
+# --- generate activities ---
+
+
+def _mock_activities_client(activity_types: list[dict]) -> MagicMock:
+    """Build a fake genai.Client that returns a fixed activities JSON response."""
+    mock = MagicMock()
+    mock.models.generate_content.return_value.text = json.dumps(
+        {"activities": activity_types}
+    )
+    return mock
+
+
+def test_generate_activities_returns_nonempty_list() -> None:
+    agent = Agent(name="Alice", age=30, employment="employed", work_zone="zone_2")
+    mock = _mock_activities_client([{"type": "work", "is_flexible": False}])
+    result = agent.generate_activities(client=mock)
+    assert isinstance(result, list)
+    assert len(result) > 0
+    assert all(isinstance(a, Activity) for a in result)
+
+
+def test_generate_activities_employed_has_work_activity() -> None:
+    agent = Agent(name="Bob", age=35, employment="employed", work_zone="zone_work")
+    mock = _mock_activities_client(
+        [
+            {"type": "work", "is_flexible": False},
+            {"type": "shopping", "is_flexible": True},
+        ]
+    )
+    result = agent.generate_activities(client=mock)
+    work_activities = [a for a in result if a.type == "work"]
+    assert len(work_activities) == 1
+    work = work_activities[0]
+    assert work.location == "zone_work"
+    assert work.is_flexible is False
+
+
+def test_generate_activities_student_has_school_activity() -> None:
+    agent = Agent(name="Carol", age=16, employment="student", school_zone="zone_school")
+    mock = _mock_activities_client([{"type": "school", "is_flexible": False}])
+    result = agent.generate_activities(client=mock)
+    school_activities = [a for a in result if a.type == "school"]
+    assert len(school_activities) == 1
+    school = school_activities[0]
+    assert school.location == "zone_school"
+    assert school.is_flexible is False
+
+
+def test_generate_activities_retired_has_no_work_or_school() -> None:
+    agent = Agent(name="Dave", age=67, employment="retired")
+    mock = _mock_activities_client([{"type": "leisure", "is_flexible": True}])
+    result = agent.generate_activities(client=mock)
+    types_in_result = [a.type for a in result]
+    assert "work" not in types_in_result
+    assert "school" not in types_in_result

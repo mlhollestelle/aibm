@@ -10,6 +10,8 @@ from typing import TYPE_CHECKING
 from google import genai
 from google.genai import types
 
+from aibm.activity import Activity
+
 if TYPE_CHECKING:
     from aibm.household import Household
 
@@ -212,3 +214,83 @@ class Agent:
         chosen_name: str = data["choice"]
         chosen_option = next(opt for opt in options if opt.mode == chosen_name)
         return ModeChoice(option=chosen_option, reasoning=data["reasoning"])
+
+    def generate_activities(
+        self,
+        client: genai.Client | None = None,
+    ) -> list[Activity]:
+        """Ask the LLM to generate today's activity list for this agent.
+
+        Mandatory activities (work for employed agents, school for students)
+        always appear. The LLM fills in discretionary ones such as shopping or
+        leisure. Work and school activities have their ``location`` and
+        ``is_flexible`` set directly from ``work_zone`` / ``school_zone``.
+
+        Args:
+            client: A ``genai.Client`` instance. A fresh one is created when
+                ``None`` is passed (reads ``GEMINI_API_KEY`` from the
+                environment).
+
+        Returns:
+            A non-empty list of ``Activity`` objects.
+        """
+        if client is None:
+            client = genai.Client()
+
+        background = self._build_background()
+        prompt = (
+            f"You are {self.name}, planning your day.\n"
+            f"Background:\n{background}\n\n"
+            "List the activities you will do today. "
+            "Include mandatory activities: work if you are employed, "
+            "school if you are a student. "
+            "Also include any discretionary activities such as shopping or "
+            "leisure. For each activity specify whether it has a flexible "
+            "time (is_flexible true) or is fixed (is_flexible false). "
+            "Work and school are always fixed (is_flexible false)."
+        )
+
+        response = client.models.generate_content(
+            model=self.model,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema={
+                    "type": "object",
+                    "properties": {
+                        "activities": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "type": {"type": "string"},
+                                    "is_flexible": {"type": "boolean"},
+                                },
+                                "required": ["type", "is_flexible"],
+                            },
+                        }
+                    },
+                    "required": ["activities"],
+                },
+            ),
+        )
+
+        if response.text is None:
+            raise ValueError("LLM returned an empty response")
+        data = json.loads(response.text)
+
+        activities: list[Activity] = []
+        for item in data["activities"]:
+            activity = Activity(
+                type=item["type"],
+                is_flexible=item["is_flexible"],
+            )
+            if activity.type == "work" and self.work_zone is not None:
+                activity.location = self.work_zone
+                activity.is_flexible = False
+            elif activity.type == "school" and self.school_zone is not None:
+                activity.location = self.school_zone
+                activity.is_flexible = False
+            activities.append(activity)
+
+        return activities
