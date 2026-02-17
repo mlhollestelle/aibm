@@ -92,6 +92,58 @@ class Agent:
             lines.append(f"Household income: {household.income_level}")
         return "\n".join(lines)
 
+    def generate_persona(
+        self,
+        client: genai.Client | None = None,
+        household: Household | None = None,
+    ) -> str:
+        """Ask the LLM to create a short behavioural persona for this agent.
+
+        The persona is a 1-2 sentence profile that captures travel habits and
+        preferences based on the agent's demographics and household context.
+        The result is stored in ``self.persona`` and also returned.
+
+        Args:
+            client: A ``genai.Client`` instance.  A fresh one is created when
+                ``None`` is passed (reads ``GEMINI_API_KEY`` from the environment).
+            household: Optional household for richer context.
+
+        Returns:
+            The generated persona string.
+        """
+        if client is None:
+            client = genai.Client()
+
+        background = self._build_background(household)
+        prompt = (
+            f"You are creating a behavioural profile for {self.name}.\n"
+            f"Demographics:\n{background}\n\n"
+            "Write a 1-2 sentence persona describing this person's travel "
+            "habits, preferences, and daily routine. Be specific and "
+            "grounded in the demographics above."
+        )
+
+        response = client.models.generate_content(
+            model=self.model,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema={
+                    "type": "object",
+                    "properties": {
+                        "persona": {"type": "string"},
+                    },
+                    "required": ["persona"],
+                },
+            ),
+        )
+
+        if response.text is None:
+            raise ValueError("LLM returned an empty response")
+        data = json.loads(response.text)
+        self.persona = data["persona"]
+        return self.persona
+
     def choose_mode(
         self,
         options: list[ModeOption],

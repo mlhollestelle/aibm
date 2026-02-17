@@ -65,7 +65,7 @@ def test_household_custom_demographics() -> None:
 def test_home_zone_propagates_to_initial_members() -> None:
     alice = Agent(name="Alice")
     bob = Agent(name="Bob")
-    hh = Household(members=[alice, bob], home_zone="zone_1")
+    Household(members=[alice, bob], home_zone="zone_1")
     assert alice.home_zone == "zone_1"
     assert bob.home_zone == "zone_1"
 
@@ -79,5 +79,5 @@ def test_home_zone_propagates_on_add_member() -> None:
 
 def test_no_propagation_when_home_zone_is_none() -> None:
     agent = Agent(name="Dave", home_zone="original")
-    hh = Household(members=[agent])
+    Household(members=[agent])
     assert agent.home_zone == "original"

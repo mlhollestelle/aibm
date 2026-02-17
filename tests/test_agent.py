@@ -78,6 +78,68 @@ def test_agent_student_demographics() -> None:
     assert agent.work_zone is None
 
 
+# --- generate persona ---
+
+
+def _mock_persona_client(persona: str) -> MagicMock:
+    """Build a fake genai.Client that returns a fixed persona JSON response."""
+    mock = MagicMock()
+    mock.models.generate_content.return_value.text = f'{{"persona": "{persona}"}}'
+    return mock
+
+
+def test_generate_persona_returns_string() -> None:
+    agent = Agent(name="Alice", age=30, employment="employed")
+    mock = _mock_persona_client("Drives to work every day.")
+    result = agent.generate_persona(client=mock)
+    assert isinstance(result, str)
+    assert result == "Drives to work every day."
+
+
+def test_generate_persona_stores_on_agent() -> None:
+    agent = Agent(name="Bob", age=25, employment="student")
+    assert agent.persona is None
+    mock = _mock_persona_client("Takes the bus to campus.")
+    agent.generate_persona(client=mock)
+    assert agent.persona == "Takes the bus to campus."
+
+
+def test_generate_persona_prompt_includes_demographics() -> None:
+    agent = Agent(name="Carol", age=45, employment="employed", has_license=True)
+    mock = _mock_persona_client("Prefers driving.")
+    agent.generate_persona(client=mock)
+
+    prompt = mock.models.generate_content.call_args.kwargs["contents"]
+    assert "Carol" in prompt
+    assert "Age: 45" in prompt
+    assert "Employment: employed" in prompt
+    assert "Has driving licence: yes" in prompt
+
+
+def test_generate_persona_prompt_includes_household() -> None:
+    agent = Agent(name="Dave", age=40, employment="employed", has_license=True)
+    hh = Household(
+        members=[agent],
+        home_zone="zone_1",
+        num_vehicles=1,
+        income_level="medium",
+    )
+    mock = _mock_persona_client("Commutes by car.")
+    agent.generate_persona(client=mock, household=hh)
+
+    prompt = mock.models.generate_content.call_args.kwargs["contents"]
+    assert "Household vehicles: 1" in prompt
+    assert "Household income: medium" in prompt
+
+
+def test_generate_persona_raises_on_empty_response() -> None:
+    agent = Agent(name="Eve")
+    mock = MagicMock()
+    mock.models.generate_content.return_value.text = None
+    with pytest.raises(ValueError, match="empty response"):
+        agent.generate_persona(client=mock)
+
+
 # --- mode choice ---
 
 OPTIONS = [
