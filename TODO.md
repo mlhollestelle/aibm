@@ -204,6 +204,10 @@ H3 ←── H2
 
 ## Optional / future considerations
 
+### OPT-2. `Population` class
+- **Depends on:** S1
+- **Consider:** `synthesize_population()` currently returns a plain `list[Household]`. A `Population` wrapper class would earn its place once any of the following arise: (1) the nested loop `[a for hh in households for a in hh.members]` is repeated in two or more real call sites — an `.agents` property would hide that detail; (2) zone-level queries like `agents_in_zone("Z1")` are needed by the model; (3) S3 (`synthesize_and_enrich`) needs a single entry point to enrich a whole population cleanly; (4) metadata such as the seed used and zone specs needs to travel alongside the data. Until then a plain list is sufficient and a wrapper class would just be complexity for its own sake.
+
 ### OPT-1. `Mode` dataclass
 - **Depends on:** A2
 - **Consider:** Currently mode is a plain `str` inside `ModeOption`. If modes grow their own fixed attributes — such as `requires_car: bool`, `cost_per_km: float`, `emissions_per_km: float` — it is worth extracting a dedicated `Mode` dataclass. `ModeOption.mode` would then reference a `Mode` object instead of a string, and richer mode descriptions could be injected into LLM prompts (e.g., "transit: 32 min, €1.50, low emissions"). No action needed until a second mode attribute is required.
