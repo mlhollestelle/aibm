@@ -6,6 +6,7 @@ import pytest
 from aibm.activity import Activity
 from aibm.agent import Agent, ModeChoice, ModeOption
 from aibm.household import Household
+from aibm.zone import Zone
 
 
 def test_agent_has_name() -> None:
@@ -310,3 +311,67 @@ def test_generate_activities_retired_has_no_work_or_school() -> None:
     types_in_result = [a.type for a in result]
     assert "work" not in types_in_result
     assert "school" not in types_in_result
+
+
+# --- choose destination ---
+
+ZONES = [
+    Zone(
+        id="zone_a",
+        name="City Centre",
+        x=0.0,
+        y=0.0,
+        land_use={"commercial": True, "residential": False},
+    ),
+    Zone(
+        id="zone_b",
+        name="Suburb North",
+        x=1.0,
+        y=1.0,
+        land_use={"commercial": False, "residential": True},
+    ),
+]
+
+
+def _mock_destination_client(zone_id: str) -> MagicMock:
+    """Build a fake genai.Client that returns a fixed destination JSON response."""
+    mock = MagicMock()
+    mock.models.generate_content.return_value.text = json.dumps(
+        {"zone_id": zone_id, "reasoning": "Good fit."}
+    )
+    return mock
+
+
+def test_choose_destination_raises_on_empty_candidates() -> None:
+    agent = Agent(name="Alice")
+    activity = Activity(type="shopping")
+    with pytest.raises(ValueError, match="at least one"):
+        agent.choose_destination(activity, candidates=[], client=MagicMock())
+
+
+def test_choose_destination_sets_location() -> None:
+    agent = Agent(name="Bob", age=30, employment="employed")
+    activity = Activity(type="shopping")
+    mock = _mock_destination_client("zone_a")
+    result = agent.choose_destination(activity, candidates=ZONES, client=mock)
+    candidate_ids = [z.id for z in ZONES]
+    assert result.location in candidate_ids
+
+
+def test_choose_destination_prompt_contains_activity_type() -> None:
+    agent = Agent(name="Carol", age=25, employment="student")
+    activity = Activity(type="leisure")
+    mock = _mock_destination_client("zone_b")
+    agent.choose_destination(activity, candidates=ZONES, client=mock)
+    prompt = mock.models.generate_content.call_args.kwargs["contents"]
+    assert "leisure" in prompt
+
+
+def test_choose_destination_prompt_contains_zone_names() -> None:
+    agent = Agent(name="Dave", age=40, employment="employed")
+    activity = Activity(type="shopping")
+    mock = _mock_destination_client("zone_a")
+    agent.choose_destination(activity, candidates=ZONES, client=mock)
+    prompt = mock.models.generate_content.call_args.kwargs["contents"]
+    assert "City Centre" in prompt
+    assert "Suburb North" in prompt

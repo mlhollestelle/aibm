@@ -109,7 +109,7 @@ and long-term location choices are LLM-generated.
 
 ## D. Destination choice (short-term)
 
-### D1. `Agent.choose_destination()`
+### D1. `Agent.choose_destination()` --> DONE
 - **Depends on:** A1, A5, C1
 - **File:** `src/aibm/agent.py`
 - **Consider:** For each flexible activity (not work/school which have fixed zones), the LLM picks a destination zone from a provided list of candidate zones. Input: one `Activity` + `list[Zone]`. Output: updated `Activity` with `location` set. Prompt should include agent persona, zone names, and land-use info. Work/school activities skip this — their location comes from the long-term choice in S2.
