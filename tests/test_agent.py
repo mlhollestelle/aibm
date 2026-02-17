@@ -495,3 +495,108 @@ def test_schedule_activities_empty_input_returns_empty_plan() -> None:
     assert isinstance(result, DayPlan)
     assert result.activities == []
     mock.models.generate_content.assert_not_called()
+
+
+# --- build tours ---
+
+
+def test_build_tours_home_work_home() -> None:
+    agent = Agent(name="Alice", age=30, employment="employed", home_zone="h")
+    plan = DayPlan(
+        activities=[
+            Activity(
+                type="work",
+                location="w",
+                start_time=480,
+                end_time=1020,
+            ),
+        ]
+    )
+    result = agent.build_tours(plan)
+    assert len(result.tours) == 1
+    tour = result.tours[0]
+    assert len(tour.trips) == 2
+    assert tour.trips[0].origin == "h"
+    assert tour.trips[0].destination == "w"
+    assert tour.trips[1].origin == "w"
+    assert tour.trips[1].destination == "h"
+    assert tour.is_closed
+
+
+def test_build_tours_multi_stop() -> None:
+    agent = Agent(name="Bob", age=35, employment="employed", home_zone="h")
+    plan = DayPlan(
+        activities=[
+            Activity(
+                type="work",
+                location="w",
+                start_time=480,
+                end_time=1020,
+            ),
+            Activity(
+                type="shopping",
+                location="s",
+                start_time=1080,
+                end_time=1140,
+            ),
+        ]
+    )
+    result = agent.build_tours(plan)
+    trips = result.trips
+    assert len(trips) == 3
+    assert trips[0].origin == "h"
+    assert trips[0].destination == "w"
+    assert trips[1].origin == "w"
+    assert trips[1].destination == "s"
+    assert trips[2].origin == "s"
+    assert trips[2].destination == "h"
+
+
+def test_build_tours_empty_activities() -> None:
+    agent = Agent(name="Carol", age=67, employment="retired", home_zone="h")
+    plan = DayPlan(activities=[])
+    result = agent.build_tours(plan)
+    assert result.tours == []
+
+
+def test_build_tours_raises_without_home_zone() -> None:
+    agent = Agent(name="Dave", age=30, employment="employed")
+    plan = DayPlan(
+        activities=[
+            Activity(
+                type="work",
+                location="w",
+                start_time=480,
+                end_time=1020,
+            ),
+        ]
+    )
+    with pytest.raises(ValueError, match="home_zone"):
+        agent.build_tours(plan)
+
+
+def test_build_tours_raises_on_missing_location() -> None:
+    agent = Agent(name="Eve", age=30, employment="employed", home_zone="h")
+    plan = DayPlan(
+        activities=[
+            Activity(type="work", start_time=480, end_time=1020),
+        ]
+    )
+    with pytest.raises(ValueError, match="no location"):
+        agent.build_tours(plan)
+
+
+def test_build_tours_tour_is_closed() -> None:
+    agent = Agent(name="Frank", age=25, employment="student", home_zone="h")
+    plan = DayPlan(
+        activities=[
+            Activity(
+                type="school",
+                location="sc",
+                start_time=480,
+                end_time=900,
+            ),
+        ]
+    )
+    result = agent.build_tours(plan)
+    assert all(t.is_closed for t in result.tours)

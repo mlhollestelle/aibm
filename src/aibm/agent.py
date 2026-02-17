@@ -12,6 +12,8 @@ from google.genai import types
 
 from aibm.activity import Activity
 from aibm.day_plan import DayPlan
+from aibm.tour import Tour
+from aibm.trip import Trip
 from aibm.zone import Zone
 
 if TYPE_CHECKING:
@@ -557,3 +559,80 @@ class Agent:
             activities, key=lambda a: a.start_time if a.start_time is not None else 0
         )
         return DayPlan(activities=sorted_activities)
+
+    def build_tours(self, day_plan: DayPlan) -> DayPlan:
+        """Convert scheduled activities into Trip/Tour objects.
+
+        Builds the sequence home → activity₁ → activity₂ → … → home,
+        creating a Trip between each consecutive pair of locations.
+        A new Tour starts each time the agent departs from home.
+
+        No LLM call is made — this is pure logic.
+
+        Args:
+            day_plan: A DayPlan with scheduled, located activities.
+
+        Returns:
+            The same ``day_plan`` with ``tours`` populated.
+
+        Raises:
+            ValueError: If ``home_zone`` is not set or any activity
+                is missing a location or times.
+        """
+        if self.home_zone is None:
+            raise ValueError("home_zone must be set before building tours")
+
+        for act in day_plan.activities:
+            if act.location is None:
+                raise ValueError(f"Activity '{act.type}' has no location")
+            if act.start_time is None or act.end_time is None:
+                raise ValueError(f"Activity '{act.type}' has no scheduled times")
+
+        if not day_plan.activities:
+            day_plan.tours = []
+            return day_plan
+
+        # Build location sequence: home → activities → home
+        locations: list[str] = [self.home_zone]
+        for act in day_plan.activities:
+            assert act.location is not None
+            locations.append(act.location)
+        locations.append(self.home_zone)
+
+        # Build departure times: leave home before first activity,
+        # leave each activity at its end_time, final arrival home
+        times: list[float] = [day_plan.activities[0].start_time or 0]
+        for act in day_plan.activities:
+            assert act.end_time is not None
+            times.append(act.end_time)
+
+        # Create trips between consecutive locations
+        all_trips: list[Trip] = []
+        for i in range(len(locations) - 1):
+            trip = Trip(
+                origin=locations[i],
+                destination=locations[i + 1],
+                departure_time=times[i],
+            )
+            all_trips.append(trip)
+
+        # Group into tours: new tour each departure from home
+        tours: list[Tour] = []
+        current_trips: list[Trip] = []
+        for trip in all_trips:
+            current_trips.append(trip)
+            if trip.destination == self.home_zone:
+                tours.append(
+                    Tour(
+                        trips=current_trips,
+                        home_zone=self.home_zone,
+                    )
+                )
+                current_trips = []
+
+        # Unclosed tour (shouldn't happen with home appended)
+        if current_trips:
+            tours.append(Tour(trips=current_trips, home_zone=self.home_zone))
+
+        day_plan.tours = tours
+        return day_plan
