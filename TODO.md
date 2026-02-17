@@ -99,7 +99,7 @@ and long-term location choices are LLM-generated.
 
 ## C. Activity generation (short-term)
 
-### C1. `Agent.generate_activities()`
+### C1. `Agent.generate_activities()` --> DONE
 - **Depends on:** A1, B1, S2
 - **File:** `src/aibm/agent.py`
 - **Consider:** LLM-powered method, same pattern as `choose_mode`. Prompt includes agent demographics, persona, and long-term zones. Returns `list[Activity]`. Mandatory activities (work for employed, school for students) should always appear; the LLM decides on discretionary ones (shopping, leisure). Define a response schema with a list of activity dicts. Work/school activities get their location pre-filled from `work_zone`/`school_zone`.
