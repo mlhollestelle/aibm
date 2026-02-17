@@ -17,3 +17,4 @@ This project is a work in progress where someone not experienced with Python bui
 ## Python
 
 * When adding a function, always add at least one test too.
+* Keep lines to a maximum of 88 characters.
