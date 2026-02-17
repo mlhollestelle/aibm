@@ -30,7 +30,25 @@ Run a script:
 uv run python scripts/example.py
 ```
 
-Lint and format:
+## Notebooks
+
+To work with the Jupyter notebooks, install the notebooks extra:
+
+```sh
+uv sync --extra notebooks
+```
+
+Launch JupyterLab:
+
+```sh
+uv run jupyter lab
+```
+
+The `notebooks/` directory contains hands-on explorations of the model components:
+
+- **synthetic_population.ipynb** — manually build a small population of zones, households, and agents
+
+## Lint and format
 
 ```sh
 uv run ruff check src tests
