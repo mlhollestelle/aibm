@@ -7,11 +7,9 @@ import uuid
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from google import genai
-from google.genai import types
-
 from aibm.activity import Activity
 from aibm.day_plan import DayPlan
+from aibm.llm import LLMClient, create_client
 from aibm.tour import Tour
 from aibm.trip import Trip
 from aibm.zone import Zone
@@ -52,7 +50,9 @@ class Agent:
 
     Attributes:
         name: Human-readable label.
-        model: Gemini model used for decision-making.
+        model: LLM model name (e.g. ``"gemini-2.5-flash-lite"`` or
+            ``"claude-sonnet-4-20250514"``).  Names starting with
+            ``"claude"`` automatically use the Anthropic API.
         id: Unique identifier (auto-generated if not supplied).
         age: Age in years (0 means not yet assigned).
         employment: Employment status — one of ``"employed"``,
@@ -100,78 +100,71 @@ class Agent:
 
     def generate_persona(
         self,
-        client: genai.Client | None = None,
+        client: LLMClient | None = None,
         household: Household | None = None,
     ) -> str:
-        """Ask the LLM to create a short behavioural persona for this agent.
+        """Ask the LLM to create a short behavioural persona.
 
-        The persona is a 1-2 sentence profile that captures travel habits and
-        preferences based on the agent's demographics and household context.
-        The result is stored in ``self.persona`` and also returned.
+        The persona is a 1-2 sentence profile that captures travel
+        habits and preferences based on demographics and household
+        context.  The result is stored in ``self.persona`` and also
+        returned.
 
         Args:
-            client: A ``genai.Client`` instance.  A fresh one is created when
-                ``None`` is passed (reads ``GEMINI_API_KEY`` from the environment).
+            client: An :class:`~aibm.llm.LLMClient`.  When *None*
+                one is created automatically based on ``self.model``.
             household: Optional household for richer context.
 
         Returns:
             The generated persona string.
         """
         if client is None:
-            client = genai.Client()
+            client = create_client(self.model)
 
         background = self._build_background(household)
         prompt = (
-            f"You are creating a behavioural profile for {self.name}.\n"
+            f"You are creating a behavioural profile for "
+            f"{self.name}.\n"
             f"Demographics:\n{background}\n\n"
-            "Write a 1-2 sentence persona describing this person's travel "
-            "habits, preferences, and daily routine. Be specific and "
-            "grounded in the demographics above."
+            "Write a 1-2 sentence persona describing this "
+            "person's travel habits, preferences, and daily "
+            "routine. Be specific and grounded in the "
+            "demographics above."
         )
 
-        response = client.models.generate_content(
+        text = client.generate_json(
             model=self.model,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema={
-                    "type": "object",
-                    "properties": {
-                        "persona": {"type": "string"},
-                    },
-                    "required": ["persona"],
+            prompt=prompt,
+            schema={
+                "type": "object",
+                "properties": {
+                    "persona": {"type": "string"},
                 },
-            ),
+                "required": ["persona"],
+            },
         )
 
-        if response.text is None:
-            raise ValueError("LLM returned an empty response")
-        data = json.loads(response.text)
+        data = json.loads(text)
         self.persona = data["persona"]
         return self.persona
 
     def choose_mode(
         self,
         options: list[ModeOption],
-        client: genai.Client | None = None,
+        client: LLMClient | None = None,
         household: Household | None = None,
     ) -> ModeChoice:
-        """Ask a Gemini LLM to pick a travel mode and explain the reasoning.
-
-        The LLM receives the agent's background (demographics, household
-        context) and each option with its travel time, then returns JSON
-        with two fields: ``reasoning`` (a short personal story) and
-        ``choice`` (the mode name).
+        """Ask the LLM to pick a travel mode and explain why.
 
         Args:
             options: Available modes with their travel times.
-            client: A ``genai.Client`` instance. A fresh one is created when
-                ``None`` is passed (reads ``GEMINI_API_KEY`` from the environment).
-            household: Optional household that supplies vehicle count and
-                income level for richer decision context.
+            client: An :class:`~aibm.llm.LLMClient`.  When *None*
+                one is created automatically based on ``self.model``.
+            household: Optional household that supplies vehicle
+                count and income level for richer decision context.
 
         Returns:
-            A ``ModeChoice`` with the selected ``ModeOption`` and the reasoning.
+            A ``ModeChoice`` with the selected option and reasoning.
 
         Raises:
             ValueError: If options is empty.
@@ -180,41 +173,38 @@ class Agent:
             raise ValueError("options must contain at least one ModeOption")
 
         if client is None:
-            client = genai.Client()
+            client = create_client(self.model)
 
         background = self._build_background(household)
         options_text = "\n".join(
             f"- {opt.mode}: {opt.travel_time} minutes" for opt in options
         )
         prompt = (
-            f"You are {self.name}, deciding how to travel today.\n"
+            f"You are {self.name}, deciding how to travel "
+            "today.\n"
             f"Background:\n{background}\n\n"
             f"Available options:\n{options_text}\n\n"
             "Pick exactly one mode. Respond with:\n"
-            '- "reasoning": a short personal story (2-3 sentences) explaining'
-            " your choice.\n"
-            '- "choice": the mode name exactly as listed above.'
+            '- "reasoning": a short personal story '
+            "(2-3 sentences) explaining your choice.\n"
+            '- "choice": the mode name exactly as listed '
+            "above."
         )
 
-        response = client.models.generate_content(
+        text = client.generate_json(
             model=self.model,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema={
-                    "type": "object",
-                    "properties": {
-                        "reasoning": {"type": "string"},
-                        "choice": {"type": "string"},
-                    },
-                    "required": ["reasoning", "choice"],
+            prompt=prompt,
+            schema={
+                "type": "object",
+                "properties": {
+                    "reasoning": {"type": "string"},
+                    "choice": {"type": "string"},
                 },
-            ),
+                "required": ["reasoning", "choice"],
+            },
         )
 
-        if response.text is None:
-            raise ValueError("LLM returned an empty response")
-        data = json.loads(response.text)
+        data = json.loads(text)
         chosen_name: str = data["choice"]
         chosen_option = next(opt for opt in options if opt.mode == chosen_name)
         return ModeChoice(option=chosen_option, reasoning=data["reasoning"])
@@ -223,21 +213,20 @@ class Agent:
         self,
         zones: list[Zone],
         travel_times: dict[str, dict[str, float]],
-        client: genai.Client | None = None,
+        client: LLMClient | None = None,
     ) -> str:
-        """Ask the LLM to pick a work zone for this employed agent.
+        """Ask the LLM to pick a work zone for this agent.
 
         Args:
             zones: Candidate work zones.
-            travel_times: Travel times from home to each zone, keyed by
-                zone id → mode → minutes.
-            client: A ``genai.Client`` instance.
+            travel_times: Zone id -> mode -> minutes.
+            client: An :class:`~aibm.llm.LLMClient`.
 
         Returns:
-            The chosen zone id (also stored as ``self.work_zone``).
+            The chosen zone id (stored as ``self.work_zone``).
 
         Raises:
-            ValueError: If the agent is not employed or zones is empty.
+            ValueError: If not employed or zones is empty.
         """
         if self.employment != "employed":
             raise ValueError("choose_work_zone only applies to employed agents")
@@ -247,21 +236,20 @@ class Agent:
         self,
         zones: list[Zone],
         travel_times: dict[str, dict[str, float]],
-        client: genai.Client | None = None,
+        client: LLMClient | None = None,
     ) -> str:
-        """Ask the LLM to pick a school zone for this student agent.
+        """Ask the LLM to pick a school zone for this agent.
 
         Args:
             zones: Candidate school zones.
-            travel_times: Travel times from home to each zone, keyed by
-                zone id → mode → minutes.
-            client: A ``genai.Client`` instance.
+            travel_times: Zone id -> mode -> minutes.
+            client: An :class:`~aibm.llm.LLMClient`.
 
         Returns:
-            The chosen zone id (also stored as ``self.school_zone``).
+            The chosen zone id (stored as ``self.school_zone``).
 
         Raises:
-            ValueError: If the agent is not a student or zones is empty.
+            ValueError: If not a student or zones is empty.
         """
         if self.employment != "student":
             raise ValueError("choose_school_zone only applies to student agents")
@@ -272,14 +260,14 @@ class Agent:
         zones: list[Zone],
         travel_times: dict[str, dict[str, float]],
         purpose: str,
-        client: genai.Client | None = None,
+        client: LLMClient | None = None,
     ) -> str:
         """Shared logic for choosing a work or school zone."""
         if not zones:
             raise ValueError("zones must contain at least one Zone")
 
         if client is None:
-            client = genai.Client()
+            client = create_client(self.model)
 
         background = self._build_background()
         zones_text = "\n".join(
@@ -292,7 +280,8 @@ class Agent:
             for zid, modes in travel_times.items()
         )
         prompt = (
-            f"You are {self.name}, choosing a {purpose} location.\n"
+            f"You are {self.name}, choosing a {purpose} "
+            "location.\n"
             f"Background:\n{background}\n\n"
             f"Candidate zones:\n{zones_text}\n\n"
             f"Travel times from home:\n{travel_text}\n\n"
@@ -300,25 +289,20 @@ class Agent:
             "Respond with the zone id and your reasoning."
         )
 
-        response = client.models.generate_content(
+        text = client.generate_json(
             model=self.model,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema={
-                    "type": "object",
-                    "properties": {
-                        "zone_id": {"type": "string"},
-                        "reasoning": {"type": "string"},
-                    },
-                    "required": ["zone_id", "reasoning"],
+            prompt=prompt,
+            schema={
+                "type": "object",
+                "properties": {
+                    "zone_id": {"type": "string"},
+                    "reasoning": {"type": "string"},
                 },
-            ),
+                "required": ["zone_id", "reasoning"],
+            },
         )
 
-        if response.text is None:
-            raise ValueError("LLM returned an empty response")
-        data = json.loads(response.text)
+        data = json.loads(text)
         chosen_id: str = data["zone_id"]
 
         if purpose == "work":
@@ -329,67 +313,64 @@ class Agent:
 
     def generate_activities(
         self,
-        client: genai.Client | None = None,
+        client: LLMClient | None = None,
     ) -> list[Activity]:
-        """Ask the LLM to generate today's activity list for this agent.
+        """Ask the LLM to generate today's activity list.
 
-        Mandatory activities (work for employed agents, school for students)
-        always appear. The LLM fills in discretionary ones such as shopping or
-        leisure. Work and school activities have their ``location`` and
-        ``is_flexible`` set directly from ``work_zone`` / ``school_zone``.
+        Mandatory activities (work / school) always appear. The
+        LLM fills in discretionary ones such as shopping or
+        leisure.
 
         Args:
-            client: A ``genai.Client`` instance. A fresh one is created when
-                ``None`` is passed (reads ``GEMINI_API_KEY`` from the
-                environment).
+            client: An :class:`~aibm.llm.LLMClient`.
 
         Returns:
             A non-empty list of ``Activity`` objects.
         """
         if client is None:
-            client = genai.Client()
+            client = create_client(self.model)
 
         background = self._build_background()
         prompt = (
             f"You are {self.name}, planning your day.\n"
             f"Background:\n{background}\n\n"
             "List the activities you will do today. "
-            "Include mandatory activities: work if you are employed, "
-            "school if you are a student. "
-            "Also include any discretionary activities such as shopping or "
-            "leisure. For each activity specify whether it has a flexible "
-            "time (is_flexible true) or is fixed (is_flexible false). "
-            "Work and school are always fixed (is_flexible false)."
+            "Include mandatory activities: work if you are "
+            "employed, school if you are a student. "
+            "Also include any discretionary activities such as "
+            "shopping or leisure. For each activity specify "
+            "whether it has a flexible time (is_flexible true) "
+            "or is fixed (is_flexible false). "
+            "Work and school are always fixed "
+            "(is_flexible false)."
         )
 
-        response = client.models.generate_content(
+        text = client.generate_json(
             model=self.model,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema={
-                    "type": "object",
-                    "properties": {
-                        "activities": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "type": {"type": "string"},
-                                    "is_flexible": {"type": "boolean"},
-                                },
-                                "required": ["type", "is_flexible"],
+            prompt=prompt,
+            schema={
+                "type": "object",
+                "properties": {
+                    "activities": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "type": {"type": "string"},
+                                "is_flexible": {"type": "boolean"},
                             },
-                        }
-                    },
-                    "required": ["activities"],
+                            "required": [
+                                "type",
+                                "is_flexible",
+                            ],
+                        },
+                    }
                 },
-            ),
+                "required": ["activities"],
+            },
         )
 
-        if response.text is None:
-            raise ValueError("LLM returned an empty response")
-        data = json.loads(response.text)
+        data = json.loads(text)
 
         activities: list[Activity] = []
         for item in data["activities"]:
@@ -411,23 +392,17 @@ class Agent:
         self,
         activity: Activity,
         candidates: list[Zone],
-        client: genai.Client | None = None,
+        client: LLMClient | None = None,
     ) -> Activity:
-        """Ask the LLM to pick a destination zone for a flexible activity.
-
-        The agent receives a list of candidate zones and selects the one that
-        best fits the activity type and their personal profile.
+        """Ask the LLM to pick a destination for an activity.
 
         Args:
-            activity: The activity that needs a destination assigned.
+            activity: The activity needing a destination.
             candidates: Available zones to choose from.
-            client: A ``genai.Client`` instance. A fresh one is created when
-                ``None`` is passed (reads ``GEMINI_API_KEY`` from the
-                environment).
+            client: An :class:`~aibm.llm.LLMClient`.
 
         Returns:
-            The same ``activity`` object with ``location`` set to the chosen
-            zone id.
+            The same ``activity`` with ``location`` set.
 
         Raises:
             ValueError: If ``candidates`` is empty.
@@ -436,7 +411,7 @@ class Agent:
             raise ValueError("candidates must contain at least one Zone")
 
         if client is None:
-            client = genai.Client()
+            client = create_client(self.model)
 
         background = self._build_background()
         zones_text = "\n".join(
@@ -444,109 +419,102 @@ class Agent:
             for z in candidates
         )
         prompt = (
-            f"You are {self.name}, choosing where to do an activity.\n"
+            f"You are {self.name}, choosing where to do an "
+            "activity.\n"
             f"Background:\n{background}\n\n"
             f"Activity type: {activity.type}\n\n"
             f"Candidate zones:\n{zones_text}\n\n"
-            "Pick exactly one zone id from the list above that best fits "
-            "this activity. Respond with the zone id and your reasoning."
+            "Pick exactly one zone id from the list above "
+            "that best fits this activity. Respond with the "
+            "zone id and your reasoning."
         )
 
-        response = client.models.generate_content(
+        text = client.generate_json(
             model=self.model,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema={
-                    "type": "object",
-                    "properties": {
-                        "zone_id": {"type": "string"},
-                        "reasoning": {"type": "string"},
-                    },
-                    "required": ["zone_id", "reasoning"],
+            prompt=prompt,
+            schema={
+                "type": "object",
+                "properties": {
+                    "zone_id": {"type": "string"},
+                    "reasoning": {"type": "string"},
                 },
-            ),
+                "required": ["zone_id", "reasoning"],
+            },
         )
 
-        if response.text is None:
-            raise ValueError("LLM returned an empty response")
-        data = json.loads(response.text)
+        data = json.loads(text)
         activity.location = data["zone_id"]
         return activity
 
     def schedule_activities(
         self,
         activities: list[Activity],
-        client: genai.Client | None = None,
+        client: LLMClient | None = None,
     ) -> DayPlan:
-        """Ask the LLM to assign start and end times to a list of activities.
+        """Ask the LLM to assign start/end times to activities.
 
-        Activities are returned sorted by ``start_time`` inside a ``DayPlan``.
-        An empty input list short-circuits and returns an empty ``DayPlan``
-        without calling the LLM.
+        An empty input list returns an empty ``DayPlan`` without
+        calling the LLM.
 
         Args:
-            activities: Activities to be scheduled (order does not matter).
-            client: A ``genai.Client`` instance. A fresh one is created when
-                ``None`` is passed (reads ``GEMINI_API_KEY`` from the
-                environment).
+            activities: Activities to schedule.
+            client: An :class:`~aibm.llm.LLMClient`.
 
         Returns:
-            A ``DayPlan`` whose ``activities`` list is sorted by
-            ``start_time``.
+            A ``DayPlan`` sorted by ``start_time``.
         """
         if not activities:
             return DayPlan(activities=[])
 
         if client is None:
-            client = genai.Client()
+            client = create_client(self.model)
 
         background = self._build_background()
         activities_text = "\n".join(
             f"- {a.type} "
-            f"(flexible: {'yes' if a.is_flexible else 'no'}, "
-            f"location: {a.location})"
+            f"(flexible: {'yes' if a.is_flexible else 'no'}"
+            f", location: {a.location})"
             for a in activities
         )
         prompt = (
             f"You are {self.name}, scheduling your day.\n"
             f"Background:\n{background}\n\n"
             f"Activities to schedule:\n{activities_text}\n\n"
-            "Assign a start_time and end_time (in minutes from midnight, "
-            "e.g. 480 = 08:00) to each activity. "
-            "Fixed activities have realistic fixed hours; flexible ones fill "
-            "the remaining time. Return them in chronological order."
+            "Assign a start_time and end_time (in minutes "
+            "from midnight, e.g. 480 = 08:00) to each "
+            "activity. Fixed activities have realistic fixed "
+            "hours; flexible ones fill the remaining time. "
+            "Return them in chronological order."
         )
 
-        response = client.models.generate_content(
+        text = client.generate_json(
             model=self.model,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema={
-                    "type": "object",
-                    "properties": {
-                        "schedule": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "type": {"type": "string"},
-                                    "start_time": {"type": "number"},
-                                    "end_time": {"type": "number"},
-                                },
-                                "required": ["type", "start_time", "end_time"],
+            prompt=prompt,
+            schema={
+                "type": "object",
+                "properties": {
+                    "schedule": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "type": {"type": "string"},
+                                "start_time": {"type": "number"},
+                                "end_time": {"type": "number"},
                             },
-                        }
-                    },
-                    "required": ["schedule"],
+                            "required": [
+                                "type",
+                                "start_time",
+                                "end_time",
+                            ],
+                        },
+                    }
                 },
-            ),
+                "required": ["schedule"],
+            },
         )
 
-        if response.text is None:
-            raise ValueError("LLM returned an empty response")
-        data = json.loads(response.text)
+        data = json.loads(text)
 
         for item in data["schedule"]:
             for activity in activities:
@@ -556,7 +524,8 @@ class Agent:
                     break
 
         sorted_activities = sorted(
-            activities, key=lambda a: a.start_time if a.start_time is not None else 0
+            activities,
+            key=lambda a: a.start_time if a.start_time is not None else 0,
         )
         return DayPlan(activities=sorted_activities)
 
