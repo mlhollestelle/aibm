@@ -86,9 +86,9 @@ def test_agent_student_demographics() -> None:
 
 
 def _mock_persona_client(persona: str) -> MagicMock:
-    """Build a fake genai.Client that returns a fixed persona JSON response."""
+    """Build a fake LLMClient that returns a fixed persona JSON."""
     mock = MagicMock()
-    mock.models.generate_content.return_value.text = f'{{"persona": "{persona}"}}'
+    mock.generate_json.return_value = f'{{"persona": "{persona}"}}'
     return mock
 
 
@@ -113,7 +113,7 @@ def test_generate_persona_prompt_includes_demographics() -> None:
     mock = _mock_persona_client("Prefers driving.")
     agent.generate_persona(client=mock)
 
-    prompt = mock.models.generate_content.call_args.kwargs["contents"]
+    prompt = mock.generate_json.call_args.kwargs["prompt"]
     assert "Carol" in prompt
     assert "Age: 45" in prompt
     assert "Employment: employed" in prompt
@@ -131,7 +131,7 @@ def test_generate_persona_prompt_includes_household() -> None:
     mock = _mock_persona_client("Commutes by car.")
     agent.generate_persona(client=mock, household=hh)
 
-    prompt = mock.models.generate_content.call_args.kwargs["contents"]
+    prompt = mock.generate_json.call_args.kwargs["prompt"]
     assert "Household vehicles: 1" in prompt
     assert "Household income: medium" in prompt
 
@@ -139,7 +139,7 @@ def test_generate_persona_prompt_includes_household() -> None:
 def test_generate_persona_raises_on_empty_response() -> None:
     agent = Agent(name="Eve")
     mock = MagicMock()
-    mock.models.generate_content.return_value.text = None
+    mock.generate_json.side_effect = ValueError("LLM returned an empty response")
     with pytest.raises(ValueError, match="empty response"):
         agent.generate_persona(client=mock)
 
@@ -154,9 +154,9 @@ OPTIONS = [
 
 
 def _mock_client(choice: str, reasoning: str) -> MagicMock:
-    """Build a fake genai.Client that returns a fixed JSON response."""
+    """Build a fake LLMClient that returns a fixed JSON."""
     mock = MagicMock()
-    mock.models.generate_content.return_value.text = (
+    mock.generate_json.return_value = (
         f'{{"reasoning": "{reasoning}", "choice": "{choice}"}}'
     )
     return mock
@@ -191,7 +191,7 @@ def test_choose_mode_includes_reasoning() -> None:
 def test_choose_mode_raises_on_empty_llm_response() -> None:
     agent = Agent(name="Alice")
     mock = MagicMock()
-    mock.models.generate_content.return_value.text = None
+    mock.generate_json.side_effect = ValueError("LLM returned an empty response")
     with pytest.raises(ValueError, match="empty response"):
         agent.choose_mode(OPTIONS, client=mock)
 
@@ -218,7 +218,7 @@ def test_choose_mode_prompt_includes_agent_demographics() -> None:
     mock = _mock_client("car", "Driving is convenient.")
     agent.choose_mode(OPTIONS, client=mock)
 
-    prompt = mock.models.generate_content.call_args.kwargs["contents"]
+    prompt = mock.generate_json.call_args.kwargs["prompt"]
     assert "Age: 42" in prompt
     assert "Employment: employed" in prompt
     assert "Has driving licence: yes" in prompt
@@ -238,7 +238,7 @@ def test_choose_mode_prompt_includes_household_context() -> None:
     mock = _mock_client("car", "We have two cars.")
     agent.choose_mode(OPTIONS, client=mock, household=hh)
 
-    prompt = mock.models.generate_content.call_args.kwargs["contents"]
+    prompt = mock.generate_json.call_args.kwargs["prompt"]
     assert "Household vehicles: 2" in prompt
     assert "Household income: high" in prompt
 
@@ -248,7 +248,7 @@ def test_choose_mode_prompt_omits_unset_optional_fields() -> None:
     mock = _mock_client("bike", "Cycling is fun.")
     agent.choose_mode(OPTIONS, client=mock)
 
-    prompt = mock.models.generate_content.call_args.kwargs["contents"]
+    prompt = mock.generate_json.call_args.kwargs["prompt"]
     assert "Age:" not in prompt  # age == 0 is omitted
     assert "Home zone:" not in prompt
     assert "Work zone:" not in prompt
@@ -261,9 +261,9 @@ def test_choose_mode_prompt_omits_unset_optional_fields() -> None:
 
 
 def _mock_zone_client(zone_id: str) -> MagicMock:
-    """Build a fake genai.Client that returns a fixed zone choice."""
+    """Build a fake LLMClient that returns a fixed zone choice."""
     mock = MagicMock()
-    mock.models.generate_content.return_value.text = json.dumps(
+    mock.generate_json.return_value = json.dumps(
         {"zone_id": zone_id, "reasoning": "Good commute."}
     )
     return mock
@@ -299,7 +299,7 @@ def test_choose_work_zone_prompt_includes_travel_times() -> None:
     agent = Agent(name="Dave", age=35, employment="employed")
     mock = _mock_zone_client("zone_a")
     agent.choose_work_zone(ZONES, TRAVEL_TIMES, client=mock)
-    prompt = mock.models.generate_content.call_args.kwargs["contents"]
+    prompt = mock.generate_json.call_args.kwargs["prompt"]
     assert "car 15 min" in prompt
     assert "transit 30 min" in prompt
 
@@ -322,11 +322,9 @@ def test_choose_school_zone_raises_for_non_student() -> None:
 
 
 def _mock_activities_client(activity_types: list[dict]) -> MagicMock:
-    """Build a fake genai.Client that returns a fixed activities JSON response."""
+    """Build a fake LLMClient that returns a fixed activities JSON."""
     mock = MagicMock()
-    mock.models.generate_content.return_value.text = json.dumps(
-        {"activities": activity_types}
-    )
+    mock.generate_json.return_value = json.dumps({"activities": activity_types})
     return mock
 
 
@@ -396,9 +394,9 @@ ZONES = [
 
 
 def _mock_destination_client(zone_id: str) -> MagicMock:
-    """Build a fake genai.Client that returns a fixed destination JSON response."""
+    """Build a fake LLMClient that returns a fixed destination JSON."""
     mock = MagicMock()
-    mock.models.generate_content.return_value.text = json.dumps(
+    mock.generate_json.return_value = json.dumps(
         {"zone_id": zone_id, "reasoning": "Good fit."}
     )
     return mock
@@ -425,7 +423,7 @@ def test_choose_destination_prompt_contains_activity_type() -> None:
     activity = Activity(type="leisure")
     mock = _mock_destination_client("zone_b")
     agent.choose_destination(activity, candidates=ZONES, client=mock)
-    prompt = mock.models.generate_content.call_args.kwargs["contents"]
+    prompt = mock.generate_json.call_args.kwargs["prompt"]
     assert "leisure" in prompt
 
 
@@ -434,7 +432,7 @@ def test_choose_destination_prompt_contains_zone_names() -> None:
     activity = Activity(type="shopping")
     mock = _mock_destination_client("zone_a")
     agent.choose_destination(activity, candidates=ZONES, client=mock)
-    prompt = mock.models.generate_content.call_args.kwargs["contents"]
+    prompt = mock.generate_json.call_args.kwargs["prompt"]
     assert "City Centre" in prompt
     assert "Suburb North" in prompt
 
@@ -443,9 +441,9 @@ def test_choose_destination_prompt_contains_zone_names() -> None:
 
 
 def _mock_schedule_client(schedule: list[dict]) -> MagicMock:
-    """Build a fake genai.Client that returns a fixed schedule JSON response."""
+    """Build a fake LLMClient that returns a fixed schedule JSON."""
     mock = MagicMock()
-    mock.models.generate_content.return_value.text = json.dumps({"schedule": schedule})
+    mock.generate_json.return_value = json.dumps({"schedule": schedule})
     return mock
 
 
@@ -494,7 +492,7 @@ def test_schedule_activities_empty_input_returns_empty_plan() -> None:
     result = agent.schedule_activities([], client=mock)
     assert isinstance(result, DayPlan)
     assert result.activities == []
-    mock.models.generate_content.assert_not_called()
+    mock.generate_json.assert_not_called()
 
 
 # --- build tours ---
