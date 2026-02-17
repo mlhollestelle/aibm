@@ -18,3 +18,25 @@ This project is a work in progress where someone not experienced with Python bui
 
 * When adding a function, always add at least one test too.
 * Keep lines to a maximum of 88 characters.
+
+## Commands
+
+Run tests:
+```
+uv run pytest
+```
+
+Format code:
+```
+uv run ruff format src tests
+```
+
+Lint:
+```
+uv run ruff check src tests
+```
+
+Type check:
+```
+uv run mypy src/
+```
