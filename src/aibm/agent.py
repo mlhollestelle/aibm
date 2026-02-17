@@ -11,6 +11,7 @@ from google import genai
 from google.genai import types
 
 from aibm.activity import Activity
+from aibm.zone import Zone
 
 if TYPE_CHECKING:
     from aibm.household import Household
@@ -294,3 +295,70 @@ class Agent:
             activities.append(activity)
 
         return activities
+
+    def choose_destination(
+        self,
+        activity: Activity,
+        candidates: list[Zone],
+        client: genai.Client | None = None,
+    ) -> Activity:
+        """Ask the LLM to pick a destination zone for a flexible activity.
+
+        The agent receives a list of candidate zones and selects the one that
+        best fits the activity type and their personal profile.
+
+        Args:
+            activity: The activity that needs a destination assigned.
+            candidates: Available zones to choose from.
+            client: A ``genai.Client`` instance. A fresh one is created when
+                ``None`` is passed (reads ``GEMINI_API_KEY`` from the
+                environment).
+
+        Returns:
+            The same ``activity`` object with ``location`` set to the chosen
+            zone id.
+
+        Raises:
+            ValueError: If ``candidates`` is empty.
+        """
+        if not candidates:
+            raise ValueError("candidates must contain at least one Zone")
+
+        if client is None:
+            client = genai.Client()
+
+        background = self._build_background()
+        zones_text = "\n".join(
+            f"- {z.id}: {z.name} ({', '.join(k for k, v in z.land_use.items() if v)})"
+            for z in candidates
+        )
+        prompt = (
+            f"You are {self.name}, choosing where to do an activity.\n"
+            f"Background:\n{background}\n\n"
+            f"Activity type: {activity.type}\n\n"
+            f"Candidate zones:\n{zones_text}\n\n"
+            "Pick exactly one zone id from the list above that best fits "
+            "this activity. Respond with the zone id and your reasoning."
+        )
+
+        response = client.models.generate_content(
+            model=self.model,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema={
+                    "type": "object",
+                    "properties": {
+                        "zone_id": {"type": "string"},
+                        "reasoning": {"type": "string"},
+                    },
+                    "required": ["zone_id", "reasoning"],
+                },
+            ),
+        )
+
+        if response.text is None:
+            raise ValueError("LLM returned an empty response")
+        data = json.loads(response.text)
+        activity.location = data["zone_id"]
+        return activity
