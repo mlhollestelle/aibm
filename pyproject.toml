@@ -20,6 +20,9 @@ dev = [
     "mypy>=1.14",
     "pre-commit>=4.0",
 ]
+notebooks = [
+    "jupyterlab>=4.0",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/aibm"]
