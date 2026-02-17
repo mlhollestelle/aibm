@@ -217,6 +217,114 @@ class Agent:
         chosen_option = next(opt for opt in options if opt.mode == chosen_name)
         return ModeChoice(option=chosen_option, reasoning=data["reasoning"])
 
+    def choose_work_zone(
+        self,
+        zones: list[Zone],
+        travel_times: dict[str, dict[str, float]],
+        client: genai.Client | None = None,
+    ) -> str:
+        """Ask the LLM to pick a work zone for this employed agent.
+
+        Args:
+            zones: Candidate work zones.
+            travel_times: Travel times from home to each zone, keyed by
+                zone id → mode → minutes.
+            client: A ``genai.Client`` instance.
+
+        Returns:
+            The chosen zone id (also stored as ``self.work_zone``).
+
+        Raises:
+            ValueError: If the agent is not employed or zones is empty.
+        """
+        if self.employment != "employed":
+            raise ValueError("choose_work_zone only applies to employed agents")
+        return self._choose_long_term_zone(zones, travel_times, "work", client)
+
+    def choose_school_zone(
+        self,
+        zones: list[Zone],
+        travel_times: dict[str, dict[str, float]],
+        client: genai.Client | None = None,
+    ) -> str:
+        """Ask the LLM to pick a school zone for this student agent.
+
+        Args:
+            zones: Candidate school zones.
+            travel_times: Travel times from home to each zone, keyed by
+                zone id → mode → minutes.
+            client: A ``genai.Client`` instance.
+
+        Returns:
+            The chosen zone id (also stored as ``self.school_zone``).
+
+        Raises:
+            ValueError: If the agent is not a student or zones is empty.
+        """
+        if self.employment != "student":
+            raise ValueError("choose_school_zone only applies to student agents")
+        return self._choose_long_term_zone(zones, travel_times, "school", client)
+
+    def _choose_long_term_zone(
+        self,
+        zones: list[Zone],
+        travel_times: dict[str, dict[str, float]],
+        purpose: str,
+        client: genai.Client | None = None,
+    ) -> str:
+        """Shared logic for choosing a work or school zone."""
+        if not zones:
+            raise ValueError("zones must contain at least one Zone")
+
+        if client is None:
+            client = genai.Client()
+
+        background = self._build_background()
+        zones_text = "\n".join(
+            f"- {z.id}: {z.name} ({', '.join(k for k, v in z.land_use.items() if v)})"
+            for z in zones
+        )
+        travel_text = "\n".join(
+            f"- {zid}: "
+            + ", ".join(f"{mode} {mins:.0f} min" for mode, mins in modes.items())
+            for zid, modes in travel_times.items()
+        )
+        prompt = (
+            f"You are {self.name}, choosing a {purpose} location.\n"
+            f"Background:\n{background}\n\n"
+            f"Candidate zones:\n{zones_text}\n\n"
+            f"Travel times from home:\n{travel_text}\n\n"
+            f"Pick exactly one zone id for your {purpose}. "
+            "Respond with the zone id and your reasoning."
+        )
+
+        response = client.models.generate_content(
+            model=self.model,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema={
+                    "type": "object",
+                    "properties": {
+                        "zone_id": {"type": "string"},
+                        "reasoning": {"type": "string"},
+                    },
+                    "required": ["zone_id", "reasoning"],
+                },
+            ),
+        )
+
+        if response.text is None:
+            raise ValueError("LLM returned an empty response")
+        data = json.loads(response.text)
+        chosen_id: str = data["zone_id"]
+
+        if purpose == "work":
+            self.work_zone = chosen_id
+        else:
+            self.school_zone = chosen_id
+        return chosen_id
+
     def generate_activities(
         self,
         client: genai.Client | None = None,

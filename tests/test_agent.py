@@ -257,6 +257,67 @@ def test_choose_mode_prompt_omits_unset_optional_fields() -> None:
     assert "Household" not in prompt
 
 
+# --- choose work/school zone ---
+
+
+def _mock_zone_client(zone_id: str) -> MagicMock:
+    """Build a fake genai.Client that returns a fixed zone choice."""
+    mock = MagicMock()
+    mock.models.generate_content.return_value.text = json.dumps(
+        {"zone_id": zone_id, "reasoning": "Good commute."}
+    )
+    return mock
+
+
+TRAVEL_TIMES = {
+    "zone_a": {"car": 15, "transit": 30},
+    "zone_b": {"car": 25, "transit": 20},
+}
+
+
+def test_choose_work_zone_sets_work_zone() -> None:
+    agent = Agent(name="Alice", age=30, employment="employed")
+    mock = _mock_zone_client("zone_a")
+    result = agent.choose_work_zone(ZONES, TRAVEL_TIMES, client=mock)
+    assert result == "zone_a"
+    assert agent.work_zone == "zone_a"
+
+
+def test_choose_work_zone_raises_for_non_employed() -> None:
+    agent = Agent(name="Bob", age=16, employment="student")
+    with pytest.raises(ValueError, match="employed"):
+        agent.choose_work_zone(ZONES, TRAVEL_TIMES, client=MagicMock())
+
+
+def test_choose_work_zone_raises_on_empty_zones() -> None:
+    agent = Agent(name="Carol", age=30, employment="employed")
+    with pytest.raises(ValueError, match="at least one"):
+        agent.choose_work_zone([], TRAVEL_TIMES, client=MagicMock())
+
+
+def test_choose_work_zone_prompt_includes_travel_times() -> None:
+    agent = Agent(name="Dave", age=35, employment="employed")
+    mock = _mock_zone_client("zone_a")
+    agent.choose_work_zone(ZONES, TRAVEL_TIMES, client=mock)
+    prompt = mock.models.generate_content.call_args.kwargs["contents"]
+    assert "car 15 min" in prompt
+    assert "transit 30 min" in prompt
+
+
+def test_choose_school_zone_sets_school_zone() -> None:
+    agent = Agent(name="Eve", age=16, employment="student")
+    mock = _mock_zone_client("zone_b")
+    result = agent.choose_school_zone(ZONES, TRAVEL_TIMES, client=mock)
+    assert result == "zone_b"
+    assert agent.school_zone == "zone_b"
+
+
+def test_choose_school_zone_raises_for_non_student() -> None:
+    agent = Agent(name="Frank", age=30, employment="employed")
+    with pytest.raises(ValueError, match="student"):
+        agent.choose_school_zone(ZONES, TRAVEL_TIMES, client=MagicMock())
+
+
 # --- generate activities ---
 
 
