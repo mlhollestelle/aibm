@@ -77,19 +77,19 @@ Input data: zone-level demographic aggregates (census or similar) + zones
 from OSM. Hard attributes are sampled with `random`; behavioural profile
 and long-term location choices are LLM-generated.
 
-### S1. `synthesize_population()` — sample hard attributes
+### S1. `synthesize_population()` — sample hard attributes --> DONE
 - **Depends on:** A5, B1, B2
 - **File:** `src/aibm/synthesis.py`
 - **Consider:** Input: a list of zone configs, each with `zone_id`, `n_households`, `household_size_dist` (weights per size), `age_dist` (weights per bracket), `employment_rate`, `vehicle_dist` (weights per count), `income_dist`. Use `random.choices` with a `seed` parameter for reproducibility. For each zone: sample `n_households`, for each household sample size, then sample members with age bracket and employment status. Assign `home_zone` from the household's zone. Do not set `work_zone`, `school_zone`, or `persona` yet — that happens in S2.
 - **Done when:** function returns `list[Household]` with correctly attributed agents, distributions roughly match inputs over a large sample, tested with a fixed seed for deterministic output.
 
-### S2. `Agent.generate_persona()` — LLM long-term choices
+### S2. `Agent.generate_persona()` — LLM long-term choices --> DONE
 - **Depends on:** S1, A5
 - **File:** `src/aibm/agent.py`
 - **Consider:** Single LLM call per agent that produces both a persona and work/school zone choice. Prompt receives: agent demographics (age, employment, license), home zone description, household context (size, income, vehicles), and a list of candidate zones with names, distances from home, and land-use/POI summaries. Response schema: `{"persona": str, "work_zone": str | null, "school_zone": str | null, "reasoning": str}`. `work_zone` is only expected when employed, `school_zone` only when student. The persona is a 2-3 sentence behavioural profile (travel preferences, daily habits). Store all fields on the Agent. Combining persona and location in one call keeps them self-consistent and halves API calls.
 - **Done when:** method sets `persona`, `work_zone`/`school_zone` on the agent, tested with mocked LLM, returns null zones for retired/unemployed agents.
 
-### S3. `synthesize_and_enrich()` — full pipeline helper
+### S3. `synthesize_and_enrich()` — full pipeline helper --> WON'T DO
 - **Depends on:** S1, S2
 - **File:** `src/aibm/synthesis.py`
 - **Consider:** Convenience function that calls `synthesize_population()` then `generate_persona()` for every agent. Accepts an optional `genai.Client` for LLM calls. Consider progress logging (agent count can be large). This is the single entry point for creating a ready-to-simulate population.
