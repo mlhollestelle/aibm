@@ -557,6 +557,24 @@ def test_schedule_activities_sets_times_on_activities() -> None:
     assert scheduled.end_time == 900
 
 
+def test_schedule_activities_same_type_gets_different_times() -> None:
+    """Two activities of the same type get their own time slots."""
+    agent = Agent(name="Eve", age=30, employment="employed")
+    activities = [
+        Activity(type="shopping", is_flexible=True),
+        Activity(type="shopping", is_flexible=True),
+    ]
+    mock = _mock_schedule_client(
+        [
+            {"type": "shopping", "start_time": 600, "end_time": 660},
+            {"type": "shopping", "start_time": 780, "end_time": 840},
+        ]
+    )
+    result = agent.schedule_activities(activities, client=mock)
+    assert result.activities[0].start_time == 600
+    assert result.activities[1].start_time == 780
+
+
 def test_schedule_activities_empty_input_returns_empty_plan() -> None:
     agent = Agent(name="Dave", age=67, employment="retired")
     mock = MagicMock()

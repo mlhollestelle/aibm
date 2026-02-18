@@ -557,12 +557,10 @@ class Agent:
 
         data = json.loads(text)
 
-        for item in data["schedule"]:
-            for activity in activities:
-                if activity.type == item["type"]:
-                    activity.start_time = item["start_time"]
-                    activity.end_time = item["end_time"]
-                    break
+        for i, item in enumerate(data["schedule"]):
+            if i < len(activities):
+                activities[i].start_time = item["start_time"]
+                activities[i].end_time = item["end_time"]
 
         sorted_activities = sorted(
             activities,
