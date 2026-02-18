@@ -7,6 +7,7 @@ import pytest
 from aibm.llm import (
     AnthropicClient,
     GeminiClient,
+    OpenAIClient,
     _strip_code_fences,
     create_client,
 )
@@ -129,6 +130,54 @@ def test_anthropic_prompt_includes_schema() -> None:
     assert '"type": "object"' in sent_prompt
 
 
+# --- OpenAIClient ---
+
+
+def test_openai_generate_json_returns_text() -> None:
+    inner = MagicMock()
+    msg = MagicMock()
+    msg.content = '{"x": 1}'
+    inner.chat.completions.create.return_value.choices = [MagicMock(message=msg)]
+    client = OpenAIClient(client=inner)
+
+    result = client.generate_json(
+        model="gpt-4o",
+        prompt="hello",
+        schema={"type": "object"},
+    )
+
+    assert result == '{"x": 1}'
+    inner.chat.completions.create.assert_called_once()
+
+
+def test_openai_raises_on_empty_response() -> None:
+    inner = MagicMock()
+    msg = MagicMock()
+    msg.content = None
+    inner.chat.completions.create.return_value.choices = [MagicMock(message=msg)]
+    client = OpenAIClient(client=inner)
+
+    with pytest.raises(ValueError, match="empty response"):
+        client.generate_json(model="gpt-4o", prompt="hello", schema={})
+
+
+def test_openai_passes_schema_as_response_format() -> None:
+    inner = MagicMock()
+    msg = MagicMock()
+    msg.content = '{"x": 1}'
+    inner.chat.completions.create.return_value.choices = [MagicMock(message=msg)]
+    client = OpenAIClient(client=inner)
+
+    schema = {"type": "object", "properties": {"x": {"type": "number"}}}
+    client.generate_json(model="gpt-4o", prompt="hello", schema=schema)
+
+    call_kwargs = inner.chat.completions.create.call_args.kwargs
+    rf = call_kwargs["response_format"]
+    assert rf["type"] == "json_schema"
+    assert rf["json_schema"]["schema"] == schema
+    assert rf["json_schema"]["strict"] is True
+
+
 # --- create_client ---
 
 
@@ -142,3 +191,15 @@ def test_create_client_gemini_returns_gemini() -> None:
     with patch.object(GeminiClient, "__init__", return_value=None):
         client = create_client("gemini-2.5-flash-lite")
     assert isinstance(client, GeminiClient)
+
+
+def test_create_client_gpt_returns_openai() -> None:
+    with patch.object(OpenAIClient, "__init__", return_value=None):
+        client = create_client("gpt-4o")
+    assert isinstance(client, OpenAIClient)
+
+
+def test_create_client_o3_returns_openai() -> None:
+    with patch.object(OpenAIClient, "__init__", return_value=None):
+        client = create_client("o3-mini")
+    assert isinstance(client, OpenAIClient)

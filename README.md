@@ -2,10 +2,11 @@
 
 ## Prerequisites
 
-This project uses LLMs to power agent decisions. It supports two providers:
+This project uses LLMs to power agent decisions. It supports three providers:
 
 - [Gemini API](https://aistudio.google.com/) (default)
-- [Anthropic API](hhttps://platform.claude.com/)
+- [Anthropic API](https://platform.claude.com/)
+- [OpenAI API](https://platform.openai.com/)
 
 Set the API key for the provider you want to use:
 
@@ -15,11 +16,16 @@ export GEMINI_API_KEY=your_key_here
 
 # For Anthropic
 export ANTHROPIC_API_KEY=your_key_here
+
+# For OpenAI
+export OPENAI_API_KEY=your_key_here
 ```
 
 To make this permanent, add the line to your shell config (e.g. `~/.bashrc` or `~/.zshrc`).
 
-The provider is selected automatically based on the model name. Names starting with `claude` use Anthropic; everything else uses Gemini:
+The provider is selected automatically based on the model name. Names starting
+with `claude` use Anthropic; names starting with `gpt-`, `o1`, or `o3` use
+OpenAI; everything else uses Gemini:
 
 ```python
 from aibm import Agent
@@ -29,6 +35,9 @@ agent = Agent(name="Alice")
 
 # Uses Anthropic
 agent = Agent(name="Alice", model="claude-sonnet-4-20250514")
+
+# Uses OpenAI
+agent = Agent(name="Alice", model="gpt-4o")
 ```
 
 ## Get started
