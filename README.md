@@ -2,13 +2,34 @@
 
 ## Prerequisites
 
-This project uses the [Gemini API](https://aistudio.google.com/) to power agent decisions. You need an API key set in your environment before running the model.
+This project uses LLMs to power agent decisions. It supports two providers:
+
+- [Gemini API](https://aistudio.google.com/) (default)
+- [Anthropic API](https://console.anthropic.com/)
+
+Set the API key for the provider you want to use:
 
 ```sh
+# For Gemini (default)
 export GEMINI_API_KEY=your_key_here
+
+# For Anthropic
+export ANTHROPIC_API_KEY=your_key_here
 ```
 
 To make this permanent, add the line to your shell config (e.g. `~/.bashrc` or `~/.zshrc`).
+
+The provider is selected automatically based on the model name. Names starting with `claude` use Anthropic; everything else uses Gemini:
+
+```python
+from aibm import Agent
+
+# Uses Gemini (default)
+agent = Agent(name="Alice")
+
+# Uses Anthropic
+agent = Agent(name="Alice", model="claude-sonnet-4-20250514")
+```
 
 ## Get started
 
