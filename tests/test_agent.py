@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from aibm.activity import Activity
+from aibm.activity import VALID_OUT_OF_HOME_TYPES, Activity
 from aibm.agent import Agent, ModeChoice, ModeOption
 from aibm.day_plan import DayPlan
 from aibm.household import Household
@@ -415,25 +415,24 @@ def test_generate_activities_student_has_school_activity() -> None:
     assert school.is_flexible is False
 
 
-def test_generate_activities_filters_out_commute() -> None:
-    """Travel/commute entries from the LLM are silently dropped."""
+def test_generate_activities_schema_has_enum_constraint() -> None:
+    """The JSON schema constrains activity types via an enum."""
     agent = Agent(name="Eve", age=30, employment="employed", work_zone="z1")
-    mock = _mock_activities_client(
-        [
-            {"type": "work", "is_flexible": False},
-            {"type": "commute home", "is_flexible": False},
-            {"type": "commute to work", "is_flexible": False},
-            {"type": "travel", "is_flexible": True},
-            {"type": "shopping", "is_flexible": True},
-        ]
-    )
-    result = agent.generate_activities(client=mock)
-    types = [a.type for a in result]
-    assert "commute home" not in types
-    assert "commute to work" not in types
-    assert "travel" not in types
-    assert "work" in types
-    assert "shopping" in types
+    mock = _mock_activities_client([{"type": "work", "is_flexible": False}])
+    agent.generate_activities(client=mock)
+    schema = mock.generate_json.call_args.kwargs["schema"]
+    item_schema = schema["properties"]["activities"]["items"]
+    assert "enum" in item_schema["properties"]["type"]
+    enum_values = item_schema["properties"]["type"]["enum"]
+    assert set(enum_values) == VALID_OUT_OF_HOME_TYPES
+
+
+def test_valid_out_of_home_types_is_complete() -> None:
+    """Smoke-test the valid activity types constant."""
+    assert "work" in VALID_OUT_OF_HOME_TYPES
+    assert "school" in VALID_OUT_OF_HOME_TYPES
+    assert "shopping" in VALID_OUT_OF_HOME_TYPES
+    assert "commute" not in VALID_OUT_OF_HOME_TYPES
 
 
 def test_generate_activities_retired_has_no_work_or_school() -> None:

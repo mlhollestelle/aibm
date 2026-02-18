@@ -4,6 +4,18 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+VALID_OUT_OF_HOME_TYPES: frozenset[str] = frozenset(
+    {
+        "work",
+        "school",
+        "shopping",
+        "leisure",
+        "personal_business",
+        "escort",
+        "eating_out",
+    }
+)
+
 
 @dataclass
 class Activity:
