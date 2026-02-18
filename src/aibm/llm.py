@@ -123,12 +123,63 @@ class AnthropicClient:
         return _strip_code_fences(text)
 
 
+class OpenAIClient:
+    """LLM client backed by OpenAI.
+
+    Args:
+        client: An existing ``openai.OpenAI`` instance.  When *None*
+            a new one is created (reads ``OPENAI_API_KEY`` from
+            the environment).
+        max_tokens: Maximum tokens in the LLM response.
+    """
+
+    def __init__(
+        self,
+        client: Any = None,
+        max_tokens: int = 1024,
+    ) -> None:
+        if client is None:
+            import openai
+
+            client = openai.OpenAI()
+        self._client: Any = client
+        self._max_tokens = max_tokens
+
+    def generate_json(
+        self,
+        model: str,
+        prompt: str,
+        schema: dict[str, Any],
+    ) -> str:
+        response = self._client.chat.completions.create(
+            model=model,
+            max_tokens=self._max_tokens,
+            messages=[{"role": "user", "content": prompt}],
+            response_format={
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "response",
+                    "schema": schema,
+                    "strict": True,
+                },
+            },
+        )
+        text: str | None = response.choices[0].message.content
+        if not text:
+            raise ValueError("LLM returned an empty response")
+        return text
+
+
 def create_client(model: str) -> LLMClient:
     """Pick the right LLM client based on the model name.
 
     Names starting with ``"claude"`` use :class:`AnthropicClient`;
-    everything else defaults to :class:`GeminiClient`.
+    names starting with ``"gpt-"``, ``"o1"``, or ``"o3"`` use
+    :class:`OpenAIClient`; everything else defaults to
+    :class:`GeminiClient`.
     """
     if model.startswith("claude"):
         return AnthropicClient()
+    if model.startswith(("gpt-", "o1", "o3")):
+        return OpenAIClient()
     return GeminiClient()
