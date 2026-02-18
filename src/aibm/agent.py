@@ -463,7 +463,15 @@ class Agent:
             f"You are {self.name}, choosing where to do an "
             "activity.\n"
             f"Background:\n{background}\n\n"
-            f"Activity type: {activity.type}\n\n"
+            f"Activity type: {activity.type}\n"
+            + (
+                f"Scheduled: {activity.start_time:.0f}"
+                f"–{activity.end_time:.0f} "
+                "(minutes from midnight)\n"
+                if activity.start_time is not None and activity.end_time is not None
+                else ""
+            )
+            + "\n"
             f"Candidate zones:\n{zones_text}\n\n"
             "Pick exactly one zone id from the list above "
             "that best fits this activity. Respond with the "
@@ -512,9 +520,7 @@ class Agent:
 
         background = self._build_background()
         activities_text = "\n".join(
-            f"- {a.type} "
-            f"(flexible: {'yes' if a.is_flexible else 'no'}"
-            f", location: {a.location})"
+            f"- {a.type} (flexible: {'yes' if a.is_flexible else 'no'})"
             for a in activities
         )
         prompt = (
