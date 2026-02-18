@@ -7,7 +7,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from aibm.activity import Activity
+from aibm.activity import VALID_OUT_OF_HOME_TYPES, Activity
 from aibm.day_plan import DayPlan
 from aibm.llm import LLMClient, create_client
 from aibm.tour import Tour
@@ -357,21 +357,20 @@ class Agent:
             client = create_client(self.model)
 
         background = self._build_background()
+        valid_types = sorted(VALID_OUT_OF_HOME_TYPES)
+        types_list = ", ".join(valid_types)
         prompt = (
             f"You are {self.name}, planning your day.\n"
             f"Background:\n{background}\n\n"
-            "List the activities you will do today. "
+            "Only include out-of-home activities. "
             "Include mandatory activities: work if you are "
             "employed, school if you are a student. "
-            "Also include any discretionary activities such as "
-            "shopping or leisure. For each activity specify "
-            "whether it has a flexible time (is_flexible true) "
-            "or is fixed (is_flexible false). "
-            "Work and school are always fixed "
-            "(is_flexible false). "
-            "Do NOT include travel or commuting as activities. "
-            "Only list activities performed at a destination "
-            "(e.g. work, school, shopping, leisure, eating out)."
+            "Also include any discretionary activities. "
+            "For each activity specify whether it has a "
+            "flexible time (is_flexible true) or is fixed "
+            "(is_flexible false). Work and school are always "
+            "fixed (is_flexible false).\n"
+            f"Allowed activity types: {types_list}."
         )
 
         text = client.generate_json(
@@ -385,8 +384,13 @@ class Agent:
                         "items": {
                             "type": "object",
                             "properties": {
-                                "type": {"type": "string"},
-                                "is_flexible": {"type": "boolean"},
+                                "type": {
+                                    "type": "string",
+                                    "enum": valid_types,
+                                },
+                                "is_flexible": {
+                                    "type": "boolean",
+                                },
                             },
                             "required": [
                                 "type",
@@ -401,18 +405,11 @@ class Agent:
 
         data = json.loads(text)
 
-        # Words that indicate travel, not a real activity
-        _travel_words = {"commute", "travel", "drive", "transit"}
-
         activities: list[Activity] = []
         for item in data["activities"]:
             act_type = item["type"].lower().strip()
 
-            # Skip travel/commute entries the LLM may produce
-            if any(w in act_type for w in _travel_words):
-                continue
-
-            # Skip work/school activities that don't apply to this agent
+            # Skip work/school if agent has no zone assigned
             if act_type == "work" and self.work_zone is None:
                 continue
             if act_type == "school" and self.school_zone is None:
