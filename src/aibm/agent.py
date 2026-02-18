@@ -374,14 +374,22 @@ class Agent:
 
         activities: list[Activity] = []
         for item in data["activities"]:
+            act_type = item["type"]
+
+            # Skip work/school activities that don't apply to this agent
+            if act_type == "work" and self.work_zone is None:
+                continue
+            if act_type == "school" and self.school_zone is None:
+                continue
+
             activity = Activity(
-                type=item["type"],
+                type=act_type,
                 is_flexible=item["is_flexible"],
             )
-            if activity.type == "work" and self.work_zone is not None:
+            if activity.type == "work":
                 activity.location = self.work_zone
                 activity.is_flexible = False
-            elif activity.type == "school" and self.school_zone is not None:
+            elif activity.type == "school":
                 activity.location = self.school_zone
                 activity.is_flexible = False
             activities.append(activity)
