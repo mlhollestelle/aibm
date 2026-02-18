@@ -36,3 +36,56 @@ def test_trips_flattens_multiple_tours_in_order() -> None:
     afternoon = Tour(trips=[t3, t4], home_zone=HOME)
     plan = DayPlan(tours=[morning, afternoon])
     assert plan.trips == [t1, t2, t3, t4]
+
+
+# --- validate ---
+
+
+def test_validate_valid_plan_returns_empty() -> None:
+    plan = DayPlan(
+        activities=[
+            Activity(type="work", start_time=480, end_time=1020),
+        ]
+    )
+    assert plan.validate() == []
+
+
+def test_validate_detects_overlap() -> None:
+    plan = DayPlan(
+        activities=[
+            Activity(type="work", start_time=480, end_time=1020),
+            Activity(type="shopping", start_time=1000, end_time=1060),
+        ]
+    )
+    warnings = plan.validate()
+    assert any("overlap" in w for w in warnings)
+
+
+def test_validate_detects_invalid_time() -> None:
+    plan = DayPlan(
+        activities=[
+            Activity(type="leisure", start_time=-10, end_time=60),
+        ]
+    )
+    warnings = plan.validate()
+    assert any("invalid" in w for w in warnings)
+
+
+def test_validate_detects_short_work() -> None:
+    plan = DayPlan(
+        activities=[
+            Activity(type="work", start_time=480, end_time=600),
+        ]
+    )
+    warnings = plan.validate()
+    assert any("outside" in w for w in warnings)
+
+
+def test_validate_detects_long_work() -> None:
+    plan = DayPlan(
+        activities=[
+            Activity(type="work", start_time=360, end_time=1020),
+        ]
+    )
+    warnings = plan.validate()
+    assert any("outside" in w for w in warnings)
