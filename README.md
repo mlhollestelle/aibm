@@ -5,7 +5,7 @@
 This project uses LLMs to power agent decisions. It supports two providers:
 
 - [Gemini API](https://aistudio.google.com/) (default)
-- [Anthropic API](https://console.anthropic.com/)
+- [Anthropic API](hhttps://platform.claude.com/)
 
 Set the API key for the provider you want to use:
 
@@ -36,7 +36,7 @@ agent = Agent(name="Alice", model="claude-sonnet-4-20250514")
 Install the package in editable mode with dev tools:
 
 ```sh
-uv sync --extra dev
+uv sync
 ```
 
 Run tests:
@@ -53,10 +53,10 @@ uv run python scripts/example.py
 
 ## Notebooks
 
-To work with the Jupyter notebooks, install the notebooks extra:
+To work with the Jupyter notebooks, install the notebooks group:
 
 ```sh
-uv sync --extra notebooks
+uv sync --group notebooks
 ```
 
 Launch JupyterLab:
