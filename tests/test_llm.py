@@ -8,6 +8,7 @@ from aibm.llm import (
     AnthropicClient,
     GeminiClient,
     OpenAIClient,
+    RateLimiter,
     _strip_code_fences,
     create_client,
 )
@@ -203,3 +204,64 @@ def test_create_client_o3_returns_openai() -> None:
     with patch.object(OpenAIClient, "__init__", return_value=None):
         client = create_client("o3-mini")
     assert isinstance(client, OpenAIClient)
+
+
+# --- RateLimiter ---
+
+
+def test_rate_limiter_delegates_to_inner_client() -> None:
+    inner = MagicMock()
+    inner.generate_json.return_value = '{"ok": true}'
+    limiter = RateLimiter(inner, max_calls=10, window=60.0)
+
+    result = limiter.generate_json(model="m", prompt="p", schema={"type": "object"})
+
+    assert result == '{"ok": true}'
+    inner.generate_json.assert_called_once_with(
+        model="m", prompt="p", schema={"type": "object"}
+    )
+
+
+def test_rate_limiter_allows_calls_under_limit() -> None:
+    inner = MagicMock()
+    inner.generate_json.return_value = "{}"
+    limiter = RateLimiter(inner, max_calls=5, window=60.0)
+
+    for _ in range(5):
+        limiter.generate_json(model="m", prompt="p", schema={})
+
+    assert inner.generate_json.call_count == 5
+
+
+@patch("aibm.llm.time.sleep")
+@patch("aibm.llm.time.monotonic")
+def test_rate_limiter_sleeps_when_limit_reached(
+    mock_monotonic: MagicMock,
+    mock_sleep: MagicMock,
+) -> None:
+    inner = MagicMock()
+    inner.generate_json.return_value = "{}"
+
+    # 2-call limit, 10-second window
+    limiter = RateLimiter(inner, max_calls=2, window=10.0)
+
+    # First two calls at t=0 and t=1 — under the limit
+    mock_monotonic.return_value = 0.0
+    limiter.generate_json(model="m", prompt="p", schema={})
+    mock_monotonic.return_value = 1.0
+    limiter.generate_json(model="m", prompt="p", schema={})
+
+    # Third call at t=2 — should sleep until t=10 (oldest + window)
+    mock_monotonic.return_value = 2.0
+    limiter.generate_json(model="m", prompt="p", schema={})
+
+    mock_sleep.assert_called_once()
+    sleep_seconds = mock_sleep.call_args[0][0]
+    assert sleep_seconds == pytest.approx(8.0)
+
+
+def test_rate_limiter_default_values() -> None:
+    inner = MagicMock()
+    limiter = RateLimiter(inner)
+    assert limiter._max_calls == 50
+    assert limiter._window == 60.0
