@@ -342,7 +342,10 @@ class Agent:
             "whether it has a flexible time (is_flexible true) "
             "or is fixed (is_flexible false). "
             "Work and school are always fixed "
-            "(is_flexible false)."
+            "(is_flexible false). "
+            "Do NOT include travel or commuting as activities. "
+            "Only list activities performed at a destination "
+            "(e.g. work, school, shopping, leisure, eating out)."
         )
 
         text = client.generate_json(
@@ -372,9 +375,16 @@ class Agent:
 
         data = json.loads(text)
 
+        # Words that indicate travel, not a real activity
+        _travel_words = {"commute", "travel", "drive", "transit"}
+
         activities: list[Activity] = []
         for item in data["activities"]:
-            act_type = item["type"]
+            act_type = item["type"].lower().strip()
+
+            # Skip travel/commute entries the LLM may produce
+            if any(w in act_type for w in _travel_words):
+                continue
 
             # Skip work/school activities that don't apply to this agent
             if act_type == "work" and self.work_zone is None:

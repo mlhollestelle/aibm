@@ -364,6 +364,27 @@ def test_generate_activities_student_has_school_activity() -> None:
     assert school.is_flexible is False
 
 
+def test_generate_activities_filters_out_commute() -> None:
+    """Travel/commute entries from the LLM are silently dropped."""
+    agent = Agent(name="Eve", age=30, employment="employed", work_zone="z1")
+    mock = _mock_activities_client(
+        [
+            {"type": "work", "is_flexible": False},
+            {"type": "commute home", "is_flexible": False},
+            {"type": "commute to work", "is_flexible": False},
+            {"type": "travel", "is_flexible": True},
+            {"type": "shopping", "is_flexible": True},
+        ]
+    )
+    result = agent.generate_activities(client=mock)
+    types = [a.type for a in result]
+    assert "commute home" not in types
+    assert "commute to work" not in types
+    assert "travel" not in types
+    assert "work" in types
+    assert "shopping" in types
+
+
 def test_generate_activities_retired_has_no_work_or_school() -> None:
     agent = Agent(name="Dave", age=67, employment="retired")
     mock = _mock_activities_client([{"type": "leisure", "is_flexible": True}])
