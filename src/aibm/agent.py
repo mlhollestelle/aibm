@@ -650,3 +650,36 @@ class Agent:
 
         day_plan.tours = tours
         return day_plan
+
+    def choose_tour_mode(
+        self,
+        tour: Tour,
+        options: list[ModeOption],
+        client: LLMClient | None = None,
+        household: Household | None = None,
+    ) -> ModeChoice:
+        """Choose one mode for the entire tour.
+
+        Calls :meth:`choose_mode` once for the first (outbound) trip
+        and applies the chosen mode to every trip in the tour.
+
+        Args:
+            tour: The tour to assign a mode to.
+            options: Available modes with travel times.
+            client: An :class:`~aibm.llm.LLMClient`.
+            household: Optional household context.
+
+        Returns:
+            The :class:`ModeChoice` for the tour.
+
+        Raises:
+            ValueError: If the tour has no trips or options
+                is empty.
+        """
+        if not tour.trips:
+            raise ValueError("tour must contain at least one trip")
+
+        choice = self.choose_mode(options, client=client, household=household)
+        for trip in tour.trips:
+            trip.mode = choice.option.mode
+        return choice
