@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import collections
 import json
 import re
+import time
 from typing import Any, Protocol
 
 
@@ -36,6 +38,54 @@ def _strip_code_fences(text: str) -> str:
     if match:
         return match.group(1).strip()
     return stripped
+
+
+class RateLimiter:
+    """Wrapper that throttles calls to an LLM client.
+
+    Enforces a maximum number of ``generate_json`` calls within
+    a rolling time window.  When the limit is reached the wrapper
+    sleeps until room opens up.
+
+    Args:
+        client: The underlying :class:`LLMClient` to delegate to.
+        max_calls: Maximum calls allowed in the window (default 50).
+        window: Length of the rolling window in seconds (default 60).
+    """
+
+    def __init__(
+        self,
+        client: LLMClient,
+        max_calls: int = 50,
+        window: float = 60.0,
+    ) -> None:
+        self._client = client
+        self._max_calls = max_calls
+        self._window = window
+        self._timestamps: collections.deque[float] = collections.deque()
+
+    def generate_json(
+        self,
+        model: str,
+        prompt: str,
+        schema: dict[str, Any],
+    ) -> str:
+        """Throttle then delegate to the wrapped client."""
+        now = time.monotonic()
+
+        # Drop timestamps outside the window
+        while self._timestamps and now - self._timestamps[0] >= self._window:
+            self._timestamps.popleft()
+
+        # If at the limit, sleep until the oldest call expires
+        if len(self._timestamps) >= self._max_calls:
+            sleep_for = self._window - (now - self._timestamps[0])
+            if sleep_for > 0:
+                time.sleep(sleep_for)
+            self._timestamps.popleft()
+
+        self._timestamps.append(time.monotonic())
+        return self._client.generate_json(model=model, prompt=prompt, schema=schema)
 
 
 class GeminiClient:

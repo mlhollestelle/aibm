@@ -144,6 +144,23 @@ def test_generate_persona_raises_on_empty_response() -> None:
         agent.generate_persona(client=mock)
 
 
+def test_generate_persona_skips_when_already_set() -> None:
+    agent = Agent(name="Alice", persona="Existing persona.")
+    mock = MagicMock()
+    result = agent.generate_persona(client=mock)
+    assert result == "Existing persona."
+    mock.generate_json.assert_not_called()
+
+
+def test_generate_persona_overwrites_when_requested() -> None:
+    agent = Agent(name="Alice", persona="Old persona.")
+    mock = _mock_persona_client("New persona.")
+    result = agent.generate_persona(client=mock, overwrite=True)
+    assert result == "New persona."
+    assert agent.persona == "New persona."
+    mock.generate_json.assert_called_once()
+
+
 # --- mode choice ---
 
 OPTIONS = [
@@ -316,6 +333,40 @@ def test_choose_school_zone_raises_for_non_student() -> None:
     agent = Agent(name="Frank", age=30, employment="employed")
     with pytest.raises(ValueError, match="student"):
         agent.choose_school_zone(ZONES, TRAVEL_TIMES, client=MagicMock())
+
+
+def test_choose_work_zone_skips_when_already_set() -> None:
+    agent = Agent(name="Grace", age=30, employment="employed", work_zone="zone_x")
+    mock = MagicMock()
+    result = agent.choose_work_zone(ZONES, TRAVEL_TIMES, client=mock)
+    assert result == "zone_x"
+    mock.generate_json.assert_not_called()
+
+
+def test_choose_work_zone_overwrites_when_requested() -> None:
+    agent = Agent(name="Grace", age=30, employment="employed", work_zone="zone_x")
+    mock = _mock_zone_client("zone_a")
+    result = agent.choose_work_zone(ZONES, TRAVEL_TIMES, client=mock, overwrite=True)
+    assert result == "zone_a"
+    assert agent.work_zone == "zone_a"
+    mock.generate_json.assert_called_once()
+
+
+def test_choose_school_zone_skips_when_already_set() -> None:
+    agent = Agent(name="Heidi", age=16, employment="student", school_zone="zone_y")
+    mock = MagicMock()
+    result = agent.choose_school_zone(ZONES, TRAVEL_TIMES, client=mock)
+    assert result == "zone_y"
+    mock.generate_json.assert_not_called()
+
+
+def test_choose_school_zone_overwrites_when_requested() -> None:
+    agent = Agent(name="Heidi", age=16, employment="student", school_zone="zone_y")
+    mock = _mock_zone_client("zone_b")
+    result = agent.choose_school_zone(ZONES, TRAVEL_TIMES, client=mock, overwrite=True)
+    assert result == "zone_b"
+    assert agent.school_zone == "zone_b"
+    mock.generate_json.assert_called_once()
 
 
 # --- generate activities ---

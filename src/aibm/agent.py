@@ -102,6 +102,7 @@ class Agent:
         self,
         client: LLMClient | None = None,
         household: Household | None = None,
+        overwrite: bool = False,
     ) -> str:
         """Ask the LLM to create a short behavioural persona.
 
@@ -110,14 +111,22 @@ class Agent:
         context.  The result is stored in ``self.persona`` and also
         returned.
 
+        If a persona already exists the LLM call is skipped and
+        the cached value is returned, unless *overwrite* is True.
+
         Args:
             client: An :class:`~aibm.llm.LLMClient`.  When *None*
                 one is created automatically based on ``self.model``.
             household: Optional household for richer context.
+            overwrite: Re-generate even when a persona already
+                exists.
 
         Returns:
             The generated persona string.
         """
+        if self.persona is not None and not overwrite:
+            return self.persona
+
         if client is None:
             client = create_client(self.model)
 
@@ -214,13 +223,19 @@ class Agent:
         zones: list[Zone],
         travel_times: dict[str, dict[str, float]],
         client: LLMClient | None = None,
+        overwrite: bool = False,
     ) -> str:
         """Ask the LLM to pick a work zone for this agent.
+
+        If a work zone is already set the LLM call is skipped and
+        the cached value is returned, unless *overwrite* is True.
 
         Args:
             zones: Candidate work zones.
             travel_times: Zone id -> mode -> minutes.
             client: An :class:`~aibm.llm.LLMClient`.
+            overwrite: Re-generate even when a work zone is
+                already set.
 
         Returns:
             The chosen zone id (stored as ``self.work_zone``).
@@ -230,6 +245,8 @@ class Agent:
         """
         if self.employment != "employed":
             raise ValueError("choose_work_zone only applies to employed agents")
+        if self.work_zone is not None and not overwrite:
+            return self.work_zone
         return self._choose_long_term_zone(zones, travel_times, "work", client)
 
     def choose_school_zone(
@@ -237,13 +254,20 @@ class Agent:
         zones: list[Zone],
         travel_times: dict[str, dict[str, float]],
         client: LLMClient | None = None,
+        overwrite: bool = False,
     ) -> str:
         """Ask the LLM to pick a school zone for this agent.
+
+        If a school zone is already set the LLM call is skipped
+        and the cached value is returned, unless *overwrite* is
+        True.
 
         Args:
             zones: Candidate school zones.
             travel_times: Zone id -> mode -> minutes.
             client: An :class:`~aibm.llm.LLMClient`.
+            overwrite: Re-generate even when a school zone is
+                already set.
 
         Returns:
             The chosen zone id (stored as ``self.school_zone``).
@@ -253,6 +277,8 @@ class Agent:
         """
         if self.employment != "student":
             raise ValueError("choose_school_zone only applies to student agents")
+        if self.school_zone is not None and not overwrite:
+            return self.school_zone
         return self._choose_long_term_zone(zones, travel_times, "school", client)
 
     def _choose_long_term_zone(

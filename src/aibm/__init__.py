@@ -2,7 +2,13 @@
 
 from aibm.agent import Agent
 from aibm.household import Household
-from aibm.llm import AnthropicClient, GeminiClient, LLMClient, create_client
+from aibm.llm import (
+    AnthropicClient,
+    GeminiClient,
+    LLMClient,
+    RateLimiter,
+    create_client,
+)
 from aibm.synthesis import ZoneSpec, synthesize_population
 from aibm.zone import Zone
 
@@ -13,6 +19,7 @@ __all__ = [
     "GeminiClient",
     "Household",
     "LLMClient",
+    "RateLimiter",
     "Zone",
     "ZoneSpec",
     "create_client",
