@@ -19,6 +19,10 @@ This project is a work in progress where someone not experienced with Python bui
 * When adding a function, always add at least one test too.
 * Keep lines to a maximum of 88 characters.
 
+## Git
+
+* Never commit to main/master branch. Create feature branch first if on main/master.
+
 ## Commands
 
 Run tests:
