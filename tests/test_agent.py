@@ -7,6 +7,8 @@ from aibm.activity import VALID_OUT_OF_HOME_TYPES, Activity
 from aibm.agent import Agent, ModeChoice, ModeOption
 from aibm.day_plan import DayPlan
 from aibm.household import Household
+from aibm.tour import Tour
+from aibm.trip import Trip
 from aibm.zone import Zone
 
 
@@ -671,6 +673,28 @@ def test_build_tours_raises_on_missing_location() -> None:
     )
     with pytest.raises(ValueError, match="no location"):
         agent.build_tours(plan)
+
+
+# --- choose tour mode ---
+
+
+def test_choose_tour_mode_sets_mode_on_all_trips() -> None:
+    agent = Agent(name="Alice", age=30, employment="employed")
+    t1 = Trip(origin="h", destination="w")
+    t2 = Trip(origin="w", destination="h")
+    tour = Tour(trips=[t1, t2], home_zone="h")
+    mock = _mock_client("car", "Driving today.")
+    result = agent.choose_tour_mode(tour, OPTIONS, client=mock)
+    assert result.option.mode == "car"
+    assert t1.mode == "car"
+    assert t2.mode == "car"
+
+
+def test_choose_tour_mode_raises_on_empty_tour() -> None:
+    agent = Agent(name="Bob")
+    tour = Tour(trips=[], home_zone="h")
+    with pytest.raises(ValueError, match="at least one trip"):
+        agent.choose_tour_mode(tour, OPTIONS, client=MagicMock())
 
 
 def test_build_tours_tour_is_closed() -> None:
