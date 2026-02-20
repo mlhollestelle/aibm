@@ -7,6 +7,7 @@ from aibm.activity import VALID_OUT_OF_HOME_TYPES, Activity
 from aibm.agent import Agent, ModeChoice, ModeOption
 from aibm.day_plan import DayPlan
 from aibm.household import Household
+from aibm.poi import POI
 from aibm.tour import Tour
 from aibm.trip import Trip
 from aibm.zone import Zone
@@ -466,11 +467,11 @@ ZONES = [
 ]
 
 
-def _mock_destination_client(zone_id: str) -> MagicMock:
-    """Build a fake LLMClient that returns a fixed destination JSON."""
+def _mock_destination_client(dest_id: str) -> MagicMock:
+    """Build a fake LLMClient that returns a fixed destination."""
     mock = MagicMock()
     mock.generate_json.return_value = json.dumps(
-        {"zone_id": zone_id, "reasoning": "Good fit."}
+        {"destination_id": dest_id, "reasoning": "Good fit."}
     )
     return mock
 
@@ -485,16 +486,15 @@ def test_choose_destination_raises_on_empty_candidates() -> None:
 def test_choose_destination_sets_location() -> None:
     agent = Agent(name="Bob", age=30, employment="employed")
     activity = Activity(type="shopping")
-    mock = _mock_destination_client("zone_a")
+    mock = _mock_destination_client("zone:zone_a")
     result = agent.choose_destination(activity, candidates=ZONES, client=mock)
-    candidate_ids = [z.id for z in ZONES]
-    assert result.location in candidate_ids
+    assert result.location == "zone_a"
 
 
 def test_choose_destination_prompt_contains_activity_type() -> None:
     agent = Agent(name="Carol", age=25, employment="student")
     activity = Activity(type="leisure")
-    mock = _mock_destination_client("zone_b")
+    mock = _mock_destination_client("zone:zone_b")
     agent.choose_destination(activity, candidates=ZONES, client=mock)
     prompt = mock.generate_json.call_args.kwargs["prompt"]
     assert "leisure" in prompt
@@ -503,11 +503,86 @@ def test_choose_destination_prompt_contains_activity_type() -> None:
 def test_choose_destination_prompt_contains_zone_names() -> None:
     agent = Agent(name="Dave", age=40, employment="employed")
     activity = Activity(type="shopping")
-    mock = _mock_destination_client("zone_a")
+    mock = _mock_destination_client("zone:zone_a")
     agent.choose_destination(activity, candidates=ZONES, client=mock)
     prompt = mock.generate_json.call_args.kwargs["prompt"]
     assert "City Centre" in prompt
     assert "Suburb North" in prompt
+
+
+# --- choose destination with POIs ---
+
+POIS = [
+    POI(
+        id="101",
+        name="Albert Heijn",
+        x=25000.0,
+        y=390000.0,
+        activity_type="shopping",
+    ),
+    POI(
+        id="102",
+        name="Jumbo",
+        x=26000.0,
+        y=391000.0,
+        activity_type="shopping",
+    ),
+]
+
+
+def test_choose_destination_with_pois_sets_location() -> None:
+    agent = Agent(name="Eve", age=28, employment="employed")
+    activity = Activity(type="shopping")
+    mock = _mock_destination_client("poi:101")
+    result = agent.choose_destination(activity, pois=POIS, client=mock)
+    assert result.location == "101"
+
+
+def test_choose_destination_poi_prompt_contains_names() -> None:
+    agent = Agent(name="Frank", age=35, employment="employed")
+    activity = Activity(type="shopping")
+    mock = _mock_destination_client("poi:101")
+    agent.choose_destination(activity, pois=POIS, client=mock)
+    prompt = mock.generate_json.call_args.kwargs["prompt"]
+    assert "Albert Heijn" in prompt
+    assert "Jumbo" in prompt
+
+
+def test_choose_destination_with_both_zones_and_pois() -> None:
+    agent = Agent(name="Grace", age=30, employment="employed")
+    activity = Activity(type="shopping")
+    mock = _mock_destination_client("poi:101")
+    result = agent.choose_destination(
+        activity, candidates=ZONES, pois=POIS, client=mock
+    )
+    assert result.location == "101"
+    prompt = mock.generate_json.call_args.kwargs["prompt"]
+    # Both zones and POIs appear in the prompt
+    assert "City Centre" in prompt
+    assert "Albert Heijn" in prompt
+
+
+def test_choose_destination_strips_prefix_from_raw_id() -> None:
+    agent = Agent(name="Helen", age=40, employment="employed")
+    activity = Activity(type="shopping")
+    mock = _mock_destination_client("zone:zone_b")
+    result = agent.choose_destination(activity, candidates=ZONES, client=mock)
+    assert result.location == "zone_b"
+
+
+def test_choose_destination_handles_bare_id() -> None:
+    agent = Agent(name="Ivan", age=50, employment="employed")
+    activity = Activity(type="shopping")
+    mock = _mock_destination_client("zone_a")
+    result = agent.choose_destination(activity, candidates=ZONES, client=mock)
+    assert result.location == "zone_a"
+
+
+def test_choose_destination_raises_when_no_candidates() -> None:
+    agent = Agent(name="Jill")
+    activity = Activity(type="shopping")
+    with pytest.raises(ValueError, match="at least one"):
+        agent.choose_destination(activity, client=MagicMock())
 
 
 # --- schedule activities ---
