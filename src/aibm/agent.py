@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 from aibm.activity import VALID_OUT_OF_HOME_TYPES, Activity
 from aibm.day_plan import DayPlan
 from aibm.llm import LLMClient, create_client
+from aibm.poi import POI
 from aibm.tour import Tour
 from aibm.trip import Trip
 from aibm.zone import Zone
@@ -432,50 +433,70 @@ class Agent:
     def choose_destination(
         self,
         activity: Activity,
-        candidates: list[Zone],
+        candidates: list[Zone] | None = None,
         client: LLMClient | None = None,
+        pois: list[POI] | None = None,
     ) -> Activity:
         """Ask the LLM to pick a destination for an activity.
+
+        Supply *candidates* (zones), *pois*, or both.  When POIs
+        are provided they are presented to the LLM as specific
+        named locations (e.g. individual shops or restaurants).
 
         Args:
             activity: The activity needing a destination.
             candidates: Available zones to choose from.
             client: An :class:`~aibm.llm.LLMClient`.
+            pois: Points of interest to choose from.
 
         Returns:
             The same ``activity`` with ``location`` set.
 
         Raises:
-            ValueError: If ``candidates`` is empty.
+            ValueError: If both *candidates* and *pois* are
+                empty / ``None``.
         """
-        if not candidates:
-            raise ValueError("candidates must contain at least one Zone")
+        has_zones = bool(candidates)
+        has_pois = bool(pois)
+        if not has_zones and not has_pois:
+            raise ValueError("Provide at least one Zone or POI as candidate")
 
         if client is None:
             client = create_client(self.model)
 
         background = self._build_background()
-        zones_text = "\n".join(
-            f"- {z.id}: {z.name} ({', '.join(k for k, v in z.land_use.items() if v)})"
-            for z in candidates
-        )
+
+        # --- build the options list shown to the LLM ----------
+        options_lines: list[str] = []
+        if has_zones:
+            assert candidates is not None
+            for z in candidates:
+                lu = ", ".join(k for k, v in z.land_use.items() if v)
+                options_lines.append(f"- zone:{z.id}: {z.name} ({lu})")
+        if has_pois:
+            assert pois is not None
+            for p in pois:
+                label = p.name if p.name else "unnamed"
+                options_lines.append(f"- poi:{p.id}: {label} [{p.activity_type}]")
+        options_text = "\n".join(options_lines)
+
+        time_text = ""
+        if activity.start_time is not None and activity.end_time is not None:
+            time_text = (
+                f"Scheduled: {activity.start_time:.0f}"
+                f"\u2013{activity.end_time:.0f} "
+                "(minutes from midnight)\n"
+            )
+
         prompt = (
             f"You are {self.name}, choosing where to do an "
             "activity.\n"
             f"Background:\n{background}\n\n"
-            f"Activity type: {activity.type}\n"
-            + (
-                f"Scheduled: {activity.start_time:.0f}"
-                f"–{activity.end_time:.0f} "
-                "(minutes from midnight)\n"
-                if activity.start_time is not None and activity.end_time is not None
-                else ""
-            )
-            + "\n"
-            f"Candidate zones:\n{zones_text}\n\n"
-            "Pick exactly one zone id from the list above "
-            "that best fits this activity. Respond with the "
-            "zone id and your reasoning."
+            f"Activity type: {activity.type}\n" + time_text + "\n"
+            f"Candidate destinations:\n{options_text}\n\n"
+            "Pick exactly one id (including the zone: or poi: "
+            "prefix) from the list above that best fits this "
+            "activity. Respond with the id and your reasoning."
         )
 
         text = client.generate_json(
@@ -484,15 +505,23 @@ class Agent:
             schema={
                 "type": "object",
                 "properties": {
-                    "zone_id": {"type": "string"},
+                    "destination_id": {"type": "string"},
                     "reasoning": {"type": "string"},
                 },
-                "required": ["zone_id", "reasoning"],
+                "required": [
+                    "destination_id",
+                    "reasoning",
+                ],
             },
         )
 
         data = json.loads(text)
-        activity.location = data["zone_id"]
+        raw_id: str = data["destination_id"]
+        # Strip the prefix so location stores a plain id.
+        if raw_id.startswith("poi:") or raw_id.startswith("zone:"):
+            activity.location = raw_id.split(":", 1)[1]
+        else:
+            activity.location = raw_id
         return activity
 
     def schedule_activities(
