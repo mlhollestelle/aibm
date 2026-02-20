@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass, field
+from typing import TypeVar
 
 from aibm.agent import Agent
 from aibm.household import Household
@@ -49,7 +50,10 @@ class ZoneSpec:
     license_rate: float = 0.75
 
 
-def _sample(rng: random.Random, dist: dict) -> object:
+_KT = TypeVar("_KT")
+
+
+def _sample(rng: random.Random, dist: dict[_KT, float]) -> _KT:
     """Sample one key from a probability distribution dict."""
     keys = list(dist.keys())
     weights = list(dist.values())
