@@ -1,0 +1,54 @@
+"""Snakemake workflow for Walcheren population synthesis.
+
+Run with:
+    uv run snakemake --cores 1 -s workflow/Snakefile
+"""
+
+
+rule all:
+    input:
+        "data/processed/walcheren_population.parquet",
+
+
+rule download_boundaries:
+    output:
+        "data/raw/walcheren_gemeenten.geojson",
+    shell:
+        "uv run python workflow/scripts/download_boundaries.py"
+
+
+rule filter_grid:
+    input:
+        grid="data/raw/2025-cbs_vk100_2024_v1.zip",
+        boundaries="data/raw/walcheren_gemeenten.geojson",
+    output:
+        "data/processed/walcheren_grid_raw.parquet",
+    shell:
+        "uv run python workflow/scripts/filter_grid.py"
+
+
+rule clean:
+    input:
+        "data/processed/walcheren_grid_raw.parquet",
+    output:
+        "data/processed/walcheren_grid_clean.parquet",
+    shell:
+        "uv run python workflow/scripts/clean_grid.py"
+
+
+rule build_specs:
+    input:
+        "data/processed/walcheren_grid_clean.parquet",
+    output:
+        "data/processed/walcheren_zone_specs.parquet",
+    shell:
+        "uv run python workflow/scripts/build_specs.py"
+
+
+rule synthesize:
+    input:
+        "data/processed/walcheren_zone_specs.parquet",
+    output:
+        "data/processed/walcheren_population.parquet",
+    shell:
+        "uv run python workflow/scripts/synthesize.py"

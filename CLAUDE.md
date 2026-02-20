@@ -23,6 +23,18 @@ This project is a work in progress where someone not experienced with Python bui
 
 * Never commit to main/master branch. Create feature branch first if on main/master.
 
+## Workflow / example model
+
+* The `workflow/` directory contains Snakemake pipeline scripts
+  for the Walcheren example model. These are **outside** the
+  aibm package — they only consume its public API.
+* Pipeline dependencies live in the `pipeline` dependency group
+  (`uv sync --group pipeline`).
+* Raw data goes in `data/raw/`, processed outputs in
+  `data/processed/`.
+* Run the pipeline:
+  `uv run snakemake --cores 1 -s workflow/Snakefile`
+
 ## Commands
 
 Run tests:
