@@ -90,3 +90,36 @@ Activate pre-commit hooks (runs ruff automatically on every `git commit`):
 ```sh
 uv run pre-commit install
 ```
+
+## Example model
+
+The package is used to develop an example model for the Walcheren
+region in the Netherlands. Walcheren consists of municipalities
+Middelburg, Veere and Vlissingen.
+
+### Input data
+
+* Demographic data for population synthesis from
+  [CBS Vierkantstatistieken](https://download.cbs.nl/vierkant/100/2025-cbs_vk100_2024_v1.zip).
+  Place the zip in `data/raw/`.
+
+### Running the pipeline
+
+Install the pipeline dependencies and run Snakemake:
+
+```sh
+uv sync --group pipeline
+uv run snakemake --cores 1 -s workflow/Snakefile
+```
+
+The pipeline steps are:
+
+1. **download_boundaries** — fetch Walcheren municipality
+   polygons from PDOK
+2. **filter_grid** — spatial-filter CBS 100m grid to Walcheren
+3. **clean** — handle anonymisation, remap age groups, derive
+   household size distributions
+4. **build_specs** — convert cleaned data to ZoneSpec objects
+5. **synthesize** — generate synthetic population
+
+Output lands in `data/processed/walcheren_population.parquet`.
