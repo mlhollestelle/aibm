@@ -33,7 +33,6 @@ htmlcov/
 !notebooks/*.ipynb
 
 # IDEs
-.vscode/
 .idea/
 *.swp
 *.swo
