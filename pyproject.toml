@@ -39,6 +39,7 @@ packages = ["src/aibm"]
 [tool.ruff]
 line-length = 88
 src = ["src"]
+exclude = ["workflow/Snakefile", "workflow/**/*.smk"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP"]
