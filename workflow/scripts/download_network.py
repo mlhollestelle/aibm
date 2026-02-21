@@ -1,4 +1,4 @@
-"""Download an OSMnx routable network for Walcheren.
+"""Download an OSMnx routable network for the study area.
 
 Reads municipality boundaries, merges them into a single polygon,
 and downloads the OSM street network clipped to that area.
@@ -9,13 +9,16 @@ Usage:
 """
 
 import argparse
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent))
+
+# isort: split
 
 import geopandas as gpd
 import osmnx as ox
-
-BOUNDARIES = Path("data/raw/walcheren_gemeenten.geojson")
-OUTPUT_TEMPLATE = "data/processed/walcheren_network_{mode}.graphml"
+from _config import load_config
 
 MODE_TO_NETWORK_TYPE = {
     "car": "drive",
@@ -26,7 +29,7 @@ MODE_TO_NETWORK_TYPE = {
 def parse_args() -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
-        description="Download OSM network for Walcheren.",
+        description="Download OSM network for study area.",
     )
     parser.add_argument(
         "--mode",
@@ -39,7 +42,8 @@ def parse_args() -> argparse.Namespace:
 
 def download_network(
     mode: str,
-    boundaries: Path = BOUNDARIES,
+    boundaries: Path,
+    output: Path,
 ) -> Path:
     """Download and save a routable network for *mode*."""
     gdf = gpd.read_file(boundaries).to_crs(epsg=4326)
@@ -52,7 +56,6 @@ def download_network(
         simplify=True,
     )
 
-    output = Path(OUTPUT_TEMPLATE.format(mode=mode))
     output.parent.mkdir(parents=True, exist_ok=True)
     ox.save_graphml(graph, filepath=output)
 
@@ -64,4 +67,10 @@ def download_network(
 
 if __name__ == "__main__":
     args = parse_args()
-    download_network(args.mode)
+    cfg = load_config()
+    name = cfg["study_area"]["name"]
+    download_network(
+        mode=args.mode,
+        boundaries=Path(f"data/raw/{name}_gemeenten.geojson"),
+        output=Path(f"data/processed/{name}_network_{args.mode}.graphml"),
+    )
