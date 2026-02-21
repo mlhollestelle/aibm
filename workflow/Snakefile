@@ -8,6 +8,8 @@ Run with:
 rule all:
     input:
         "data/processed/walcheren_population.parquet",
+        "data/processed/walcheren_skim_car.omx",
+        "data/processed/walcheren_skim_bike.omx",
 
 
 rule download_boundaries:
@@ -15,6 +17,31 @@ rule download_boundaries:
         "data/raw/walcheren_gemeenten.geojson",
     shell:
         "uv run python workflow/scripts/download_boundaries.py"
+
+
+rule download_network:
+    input:
+        boundaries="data/raw/walcheren_gemeenten.geojson",
+    output:
+        "data/processed/walcheren_network_{mode}.graphml",
+    wildcard_constraints:
+        mode="car|bike",
+    shell:
+        "uv run python workflow/scripts/download_network.py"
+        " --mode {wildcards.mode}"
+
+
+rule build_skim:
+    input:
+        network="data/processed/walcheren_network_{mode}.graphml",
+        grid="data/processed/walcheren_grid_clean.parquet",
+    output:
+        "data/processed/walcheren_skim_{mode}.omx",
+    wildcard_constraints:
+        mode="car|bike",
+    shell:
+        "uv run python workflow/scripts/build_skim.py"
+        " --mode {wildcards.mode}"
 
 
 rule filter_grid:
