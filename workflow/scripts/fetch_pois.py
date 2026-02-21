@@ -18,7 +18,9 @@ from shapely.geometry import Point
 
 # ----- paths --------------------------------------------------------
 BOUNDARIES = Path("data/raw/walcheren_gemeenten.geojson")
+GRID = Path("data/processed/walcheren_grid_clean.parquet")
 OUTPUT = Path("data/processed/walcheren_pois.parquet")
+OUTPUT_GPKG = Path("data/processed/walcheren_pois.gpkg")
 
 # ----- OSM tag mapping per activity type ----------------------------
 # Keys are the activity types from aibm.activity.VALID_OUT_OF_HOME_TYPES.
@@ -82,6 +84,37 @@ ACTIVITY_TAGS: dict[str, dict[str, bool | list[str]]] = {
 }
 
 
+def assign_grid_zone(
+    pois: gpd.GeoDataFrame,
+    grid: gpd.GeoDataFrame,
+) -> gpd.GeoDataFrame:
+    """Add a ``zone_id`` column to *pois* from the nearest grid cell.
+
+    Each POI point is matched to the geographically nearest 100 m grid
+    cell polygon.  Both GeoDataFrames must be in the same CRS.
+
+    Parameters
+    ----------
+    pois:
+        GeoDataFrame of POI points.
+    grid:
+        GeoDataFrame of grid cell polygons with a ``zone_id`` column.
+
+    Returns
+    -------
+    Copy of *pois* with an added ``zone_id`` column.
+    """
+    # "left" join ensures every POI gets a zone_id, including those
+    # slightly outside the study area boundary — they snap to the
+    # nearest cell rather than being dropped.
+    joined = gpd.sjoin_nearest(
+        pois,
+        grid[["zone_id", "geometry"]],
+        how="left",
+    )
+    return joined.drop(columns=["index_right"])
+
+
 def _to_point(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     """Convert all geometries to their centroid point."""
     gdf = gdf.copy()
@@ -94,6 +127,8 @@ def _to_point(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
 def fetch_pois(
     boundaries_path: Path = BOUNDARIES,
     output_path: Path = OUTPUT,
+    output_gpkg: Path = OUTPUT_GPKG,
+    grid_path: Path = GRID,
 ) -> Path:
     """Download POIs for every activity type and save as Parquet.
 
@@ -103,6 +138,12 @@ def fetch_pois(
         GeoJSON with Walcheren municipality polygons (EPSG:28992).
     output_path:
         Destination GeoParquet file.
+    output_gpkg:
+        Destination GeoPackage file.
+    grid_path:
+        GeoParquet with cleaned 100 m grid cells (EPSG:28992).
+        Each POI is matched to its nearest grid cell and the
+        ``zone_id`` is stored in the output.
 
     Returns
     -------
@@ -153,9 +194,18 @@ def fetch_pois(
         f"{result['activity_type'].nunique()} activity types."
     )
 
+    grid = gpd.read_parquet(grid_path)[["zone_id", "geometry"]]
+    result = assign_grid_zone(result, grid)
+    print("Assigned each POI to its nearest grid zone_id.")
+
     output_path.parent.mkdir(parents=True, exist_ok=True)
     result.to_parquet(output_path)
     print(f"Saved to {output_path}")
+
+    output_gpkg.parent.mkdir(parents=True, exist_ok=True)
+    result.to_file(output_gpkg, driver="GPKG")
+    print(f"Saved to {output_gpkg}")
+
     return output_path
 
 
