@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import random
 import uuid
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
@@ -11,6 +12,8 @@ from aibm.activity import VALID_OUT_OF_HOME_TYPES, Activity
 from aibm.day_plan import DayPlan
 from aibm.llm import LLMClient, create_client
 from aibm.poi import POI
+from aibm.sampling import sample_destinations
+from aibm.skim import Skim
 from aibm.tour import Tour
 from aibm.trip import Trip
 from aibm.zone import Zone
@@ -436,6 +439,10 @@ class Agent:
         candidates: list[Zone] | None = None,
         client: LLMClient | None = None,
         pois: list[POI] | None = None,
+        skims: list[Skim] | None = None,
+        current_zone: str | None = None,
+        n_candidates: int = 10,
+        rng: random.Random | None = None,
     ) -> Activity:
         """Ask the LLM to pick a destination for an activity.
 
@@ -448,6 +455,12 @@ class Agent:
             candidates: Available zones to choose from.
             client: An :class:`~aibm.llm.LLMClient`.
             pois: Points of interest to choose from.
+            skims: Skim matrices (one per mode) for travel
+                time lookups.
+            current_zone: Agent's current location zone id.
+                Falls back to ``self.home_zone`` when *None*.
+            n_candidates: Max candidates to show the LLM.
+            rng: Optional seeded RNG for reproducible sampling.
 
         Returns:
             The same ``activity`` with ``location`` set.
@@ -464,21 +477,58 @@ class Agent:
         if client is None:
             client = create_client(self.model)
 
-        background = self._build_background()
-
-        # --- build the options list shown to the LLM ----------
-        options_lines: list[str] = []
+        # Sample candidates down to n_candidates.
         if has_zones:
             assert candidates is not None
+            candidates = sample_destinations(candidates, n=n_candidates, rng=rng)
+        if has_pois:
+            assert pois is not None
+            pois = sample_destinations(pois, n=n_candidates, rng=rng)
+
+        background = self._build_background()
+
+        # --- build the options list shown to the LLM ------
+        options_lines: list[str] = []
+        if candidates:
             for z in candidates:
                 lu = ", ".join(k for k, v in z.land_use.items() if v)
                 options_lines.append(f"- zone:{z.id}: {z.name} ({lu})")
-        if has_pois:
-            assert pois is not None
+        if pois:
             for p in pois:
                 label = p.name if p.name else "unnamed"
                 options_lines.append(f"- poi:{p.id}: {label} [{p.activity_type}]")
         options_text = "\n".join(options_lines)
+
+        # --- build travel time block --------------------
+        travel_block = ""
+        origin = current_zone or self.home_zone
+        if skims and origin:
+            tt_lines: list[str] = []
+            if candidates:
+                for z in candidates:
+                    parts = []
+                    for sk in skims:
+                        tt = sk.travel_time(origin, z.id)
+                        if tt < float("inf"):
+                            parts.append(f"{sk.mode} {tt:.0f} min")
+                    if parts:
+                        tt_lines.append(f"- zone:{z.id}: " + ", ".join(parts))
+            if pois:
+                for p in pois:
+                    if p.zone_id is None:
+                        continue
+                    parts = []
+                    for sk in skims:
+                        tt = sk.travel_time(origin, p.zone_id)
+                        if tt < float("inf"):
+                            parts.append(f"{sk.mode} {tt:.0f} min")
+                    if parts:
+                        tt_lines.append(f"- poi:{p.id}: " + ", ".join(parts))
+            if tt_lines:
+                travel_block = (
+                    "\nTravel times from your current "
+                    "location:\n" + "\n".join(tt_lines) + "\n"
+                )
 
         time_text = ""
         if activity.start_time is not None and activity.end_time is not None:
@@ -493,10 +543,12 @@ class Agent:
             "activity.\n"
             f"Background:\n{background}\n\n"
             f"Activity type: {activity.type}\n" + time_text + "\n"
-            f"Candidate destinations:\n{options_text}\n\n"
-            "Pick exactly one id (including the zone: or poi: "
-            "prefix) from the list above that best fits this "
-            "activity. Respond with the id and your reasoning."
+            f"Candidate destinations:\n{options_text}\n"
+            + travel_block
+            + "\nPick exactly one id (including the zone: or "
+            "poi: prefix) from the list above that best fits "
+            "this activity. Respond with the id and your "
+            "reasoning."
         )
 
         text = client.generate_json(

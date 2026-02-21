@@ -1,6 +1,7 @@
 import json
 from unittest.mock import MagicMock
 
+import numpy as np
 import pytest
 
 from aibm.activity import VALID_OUT_OF_HOME_TYPES, Activity
@@ -8,6 +9,7 @@ from aibm.agent import Agent, ModeChoice, ModeOption
 from aibm.day_plan import DayPlan
 from aibm.household import Household
 from aibm.poi import POI
+from aibm.skim import Skim
 from aibm.tour import Tour
 from aibm.trip import Trip
 from aibm.zone import Zone
@@ -519,6 +521,7 @@ POIS = [
         x=25000.0,
         y=390000.0,
         activity_type="shopping",
+        zone_id="zone_a",
     ),
     POI(
         id="102",
@@ -526,6 +529,7 @@ POIS = [
         x=26000.0,
         y=391000.0,
         activity_type="shopping",
+        zone_id="zone_b",
     ),
 ]
 
@@ -583,6 +587,108 @@ def test_choose_destination_raises_when_no_candidates() -> None:
     activity = Activity(type="shopping")
     with pytest.raises(ValueError, match="at least one"):
         agent.choose_destination(activity, client=MagicMock())
+
+
+# --- choose destination with travel times ---
+
+
+def _make_skims() -> list[Skim]:
+    """Build small car + bike skims for zone_a and zone_b."""
+    car = np.array([[0.0, 12.0], [12.0, 0.0]])
+    bike = np.array([[0.0, 25.0], [25.0, 0.0]])
+    return [
+        Skim(mode="car", matrix=car, zone_ids=["zone_a", "zone_b"]),
+        Skim(mode="bike", matrix=bike, zone_ids=["zone_a", "zone_b"]),
+    ]
+
+
+def test_choose_destination_travel_times_in_prompt() -> None:
+    agent = Agent(name="Kim", age=30, employment="employed")
+    activity = Activity(type="shopping")
+    mock = _mock_destination_client("zone:zone_a")
+    skims = _make_skims()
+    agent.choose_destination(
+        activity,
+        candidates=ZONES,
+        client=mock,
+        skims=skims,
+        current_zone="zone_a",
+    )
+    prompt = mock.generate_json.call_args.kwargs["prompt"]
+    assert "Travel times from your current location" in prompt
+    assert "car 0 min" in prompt  # zone_a -> zone_a
+    assert "car 12 min" in prompt  # zone_a -> zone_b
+
+
+def test_choose_destination_no_travel_times_without_skims() -> None:
+    agent = Agent(name="Leo", age=30, employment="employed")
+    activity = Activity(type="shopping")
+    mock = _mock_destination_client("zone:zone_a")
+    agent.choose_destination(activity, candidates=ZONES, client=mock)
+    prompt = mock.generate_json.call_args.kwargs["prompt"]
+    assert "Travel times" not in prompt
+
+
+def test_choose_destination_falls_back_to_home_zone() -> None:
+    agent = Agent(
+        name="Mia",
+        age=30,
+        employment="employed",
+        home_zone="zone_a",
+    )
+    activity = Activity(type="shopping")
+    mock = _mock_destination_client("zone:zone_b")
+    skims = _make_skims()
+    agent.choose_destination(
+        activity,
+        candidates=ZONES,
+        client=mock,
+        skims=skims,
+        # current_zone not set — should use home_zone
+    )
+    prompt = mock.generate_json.call_args.kwargs["prompt"]
+    assert "Travel times from your current location" in prompt
+    assert "car 12 min" in prompt  # zone_a -> zone_b
+
+
+def test_choose_destination_sampling_limits_candidates() -> None:
+    many_zones = [Zone(id=f"z{i}", name=f"Zone {i}", x=0.0, y=0.0) for i in range(20)]
+    agent = Agent(name="Ned", age=30, employment="employed")
+    activity = Activity(type="shopping")
+    mock = _mock_destination_client("zone:z0")
+    import random as rmod
+
+    agent.choose_destination(
+        activity,
+        candidates=many_zones,
+        client=mock,
+        n_candidates=5,
+        rng=rmod.Random(42),
+    )
+    prompt = mock.generate_json.call_args.kwargs["prompt"]
+    # Count zone: lines — should be at most 5
+    zone_lines = [ln for ln in prompt.splitlines() if ln.strip().startswith("- zone:")]
+    assert len(zone_lines) == 5
+
+
+def test_choose_destination_poi_travel_times_use_zone_id() -> None:
+    agent = Agent(name="Pia", age=30, employment="employed")
+    activity = Activity(type="shopping")
+    mock = _mock_destination_client("poi:101")
+    skims = _make_skims()
+    agent.choose_destination(
+        activity,
+        pois=POIS,
+        client=mock,
+        skims=skims,
+        current_zone="zone_a",
+    )
+    prompt = mock.generate_json.call_args.kwargs["prompt"]
+    assert "Travel times" in prompt
+    # POI 101 has zone_id="zone_a", so car=0, bike=0
+    assert "poi:101: car 0 min" in prompt
+    # POI 102 has zone_id="zone_b", so car=12, bike=25
+    assert "poi:102: car 12 min" in prompt
 
 
 # --- schedule activities ---
