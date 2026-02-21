@@ -19,6 +19,7 @@ def clean_grid(
 ) -> Path:
     """Clean raw grid and prepare columns for ZoneSpec."""
     gdf = gpd.read_parquet(input_path)
+    geometry = gdf.geometry  # save before drop
     df = pd.DataFrame(gdf.drop(columns="geometry"))
 
     # --- Handle CBS anonymisation codes ---
@@ -81,8 +82,14 @@ def clean_grid(
     print(f"Cleaned data: {len(df)} zones")
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    df.to_parquet(output_path, index=False)
+    result = gpd.GeoDataFrame(df, geometry=geometry.loc[df.index], crs=gdf.crs)
+    result.to_parquet(output_path, index=False)
     print(f"Saved to {output_path}")
+
+    gpkg_path = output_path.with_suffix(".gpkg")
+    result.to_file(gpkg_path, driver="GPKG")
+    print(f"Saved to {gpkg_path}")
+
     return output_path
 
 

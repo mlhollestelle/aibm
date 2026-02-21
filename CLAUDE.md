@@ -23,6 +23,46 @@ This project is a work in progress where someone not experienced with Python bui
 
 * Never commit to main/master branch. Create feature branch first if on main/master.
 
+## Project Structure
+
+```
+aibm/
+├── src/
+│   ├── aibm/                  # Main package: the ABM core
+│   │   ├── agent.py           # Agent class (one person in the model)
+│   │   ├── household.py       # Household class (group of agents)
+│   │   ├── zone.py            # Zone class (geographic unit / TAZ)
+│   │   ├── activity.py        # Activity types and data
+│   │   ├── trip.py            # Trip between two locations
+│   │   ├── tour.py            # Tour (chain of trips from/to home)
+│   │   ├── day_plan.py        # Full-day activity schedule for an agent
+│   │   ├── synthesis.py       # Population synthesis (create agents from specs)
+│   │   ├── llm.py             # LLM client wrappers (Anthropic, Gemini)
+│   │   └── __init__.py        # Public API exports
+│   └── synth_pop/             # Synthetic population helpers (WIP)
+├── workflow/                  # Snakemake pipeline for the Walcheren example model
+│   ├── Snakefile              # Pipeline definition and rules
+│   └── scripts/               # One script per pipeline step
+│       ├── download_boundaries.py  # Download study area boundary
+│       ├── download_network.py     # Download OSM road network
+│       ├── clean_grid.py           # Clean CBS grid data
+│       ├── filter_grid.py          # Filter grid to study area
+│       ├── build_specs.py          # Build zone specs from grid
+│       ├── synthesize.py           # Run population synthesis
+│       ├── build_skim.py           # Compute travel time skim matrix
+│       └── export_network.py       # Export network as GeoParquet
+├── tests/                     # pytest test suite (mirrors src/aibm/)
+├── notebooks/                 # Jupyter notebooks for exploration
+├── scripts/                   # Ad-hoc development and experiment scripts
+├── data/
+│   ├── raw/                   # Raw input data (not in git)
+│   └── processed/             # Pipeline outputs (not in git)
+├── .claude/
+│   └── agents/                # Custom Claude sub-agent definitions
+├── pyproject.toml             # Project metadata and dependencies
+└── uv.lock                    # Locked dependency versions
+```
+
 ## Workflow / example model
 
 * The `workflow/` directory contains Snakemake pipeline scripts
