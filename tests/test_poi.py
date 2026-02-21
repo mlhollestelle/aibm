@@ -16,6 +16,19 @@ def test_poi_attributes() -> None:
     assert poi.x == 1.0
     assert poi.y == 2.0
     assert poi.activity_type == "shopping"
+    assert poi.zone_id is None
+
+
+def test_poi_with_zone_id() -> None:
+    poi = POI(
+        id="1",
+        name="Shop",
+        x=0.0,
+        y=0.0,
+        activity_type="shopping",
+        zone_id="E123N456",
+    )
+    assert poi.zone_id == "E123N456"
 
 
 def test_poi_empty_name() -> None:
@@ -77,6 +90,7 @@ def test_load_pois_roundtrip(tmp_path: object) -> None:
             "osmid": [100, 200],
             "name": ["Shop A", None],
             "activity_type": ["shopping", "leisure"],
+            "zone_id": ["E250N3900", None],
             "geometry": [Point(25000, 390000), Point(26000, 391000)],
         },
         crs="EPSG:28992",
@@ -91,6 +105,8 @@ def test_load_pois_roundtrip(tmp_path: object) -> None:
     assert pois[0].activity_type == "shopping"
     assert pois[0].x == 25000.0
     assert pois[0].y == 390000.0
+    assert pois[0].zone_id == "E250N3900"
 
     # None name should be converted to empty string
     assert pois[1].name == ""
+    assert pois[1].zone_id is None

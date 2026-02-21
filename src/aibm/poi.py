@@ -21,6 +21,8 @@ class POI:
         activity_type: The activity type this POI serves, matching
             one of :data:`aibm.activity.VALID_OUT_OF_HOME_TYPES`
             (e.g. ``"shopping"``, ``"leisure"``).
+        zone_id: Grid zone id the POI falls in (set by
+            ``fetch_pois.py``).  ``None`` when not available.
     """
 
     id: str
@@ -28,6 +30,7 @@ class POI:
     x: float
     y: float
     activity_type: str
+    zone_id: str | None = None
 
 
 def load_pois(path: str | Path) -> list[POI]:
@@ -60,15 +63,26 @@ def load_pois(path: str | Path) -> list[POI]:
     if missing:
         raise ValueError(f"Missing columns in POI file: {sorted(missing)}")
 
+    has_zone_id = "zone_id" in gdf.columns
+
+    def _is_na(val: object) -> bool:
+        """Check for NaN/None without importing pandas at top level."""
+        return val is None or (isinstance(val, float) and val != val)
+
     pois: list[POI] = []
     for _, row in gdf.iterrows():
+        zid: str | None = None
+        if has_zone_id and not _is_na(row["zone_id"]):
+            zid = str(row["zone_id"])
+        name = row["name"]
         pois.append(
             POI(
                 id=str(row["osmid"]),
-                name=row["name"] if row["name"] is not None else "",
+                name="" if _is_na(name) else str(name),
                 x=float(row.geometry.x),
                 y=float(row.geometry.y),
                 activity_type=str(row["activity_type"]),
+                zone_id=zid,
             )
         )
     return pois
