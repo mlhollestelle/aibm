@@ -1,4 +1,4 @@
-"""Build an all-pairs travel-time skim matrix for Walcheren.
+"""Build an all-pairs travel-time skim matrix for the study area.
 
 Loads a GraphML network and the zone grid, computes shortest-path
 travel times from every zone centroid, and writes the result as an
@@ -11,7 +11,12 @@ Usage:
 
 import argparse
 import re
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent))
+
+# isort: split
 
 import networkx as nx
 import numpy as np
@@ -19,32 +24,7 @@ import openmatrix as omx
 import osmnx as ox
 import pandas as pd
 import tables
-
-NETWORK_TEMPLATE = "data/processed/walcheren_network_{mode}.graphml"
-GRID = Path("data/processed/walcheren_grid_clean.parquet")
-OUTPUT_TEMPLATE = "data/processed/walcheren_skim_{mode}.omx"
-
-UNREACHABLE = 999.0
-
-# Default speed limits (km/h) by OSM highway tag for car mode.
-HIGHWAY_SPEED_DEFAULTS: dict[str, float] = {
-    "motorway": 100,
-    "motorway_link": 60,
-    "trunk": 80,
-    "trunk_link": 50,
-    "primary": 80,
-    "primary_link": 50,
-    "secondary": 70,
-    "secondary_link": 50,
-    "tertiary": 50,
-    "tertiary_link": 30,
-    "residential": 30,
-    "living_street": 15,
-    "unclassified": 50,
-    "service": 20,
-}
-DEFAULT_CAR_SPEED = 30.0  # km/h fallback
-BIKE_SPEED = 18.0  # km/h flat terrain
+from _config import load_config
 
 # Pattern to extract a numeric speed from OSM maxspeed tag.
 _SPEED_RE = re.compile(r"(\d+)")
@@ -84,7 +64,11 @@ def _get_highway_type(value: str | list[str]) -> str:
     return value
 
 
-def _add_travel_time_car(graph: nx.MultiDiGraph) -> None:
+def _add_travel_time_car(
+    graph: nx.MultiDiGraph,
+    highway_speeds: dict[str, float],
+    default_speed: float,
+) -> None:
     """Add ``travel_time_min`` edge attribute for car mode."""
     for _, _, data in graph.edges(data=True):
         length_km = data["length"] / 1000.0
@@ -97,16 +81,19 @@ def _add_travel_time_car(graph: nx.MultiDiGraph) -> None:
         if speed is None:
             highway = data.get("highway", "")
             hw_type = _get_highway_type(highway)
-            speed = HIGHWAY_SPEED_DEFAULTS.get(hw_type, DEFAULT_CAR_SPEED)
+            speed = highway_speeds.get(hw_type, default_speed)
 
         data["travel_time_min"] = (length_km / speed) * 60.0
 
 
-def _add_travel_time_bike(graph: nx.MultiDiGraph) -> None:
+def _add_travel_time_bike(
+    graph: nx.MultiDiGraph,
+    bike_speed: float,
+) -> None:
     """Add ``travel_time_min`` edge attribute for bike mode."""
     for _, _, data in graph.edges(data=True):
         length_km = data["length"] / 1000.0
-        data["travel_time_min"] = (length_km / BIKE_SPEED) * 60.0
+        data["travel_time_min"] = (length_km / bike_speed) * 60.0
 
 
 def _centroids_from_zone_ids(
@@ -133,31 +120,34 @@ def _centroids_from_zone_ids(
     return eastings, northings
 
 
-def build_skim(mode: str) -> Path:
+def build_skim(mode: str, cfg: dict) -> Path:
     """Compute skim matrix and write OMX file."""
-    # Load network and add travel times.
-    network_path = Path(NETWORK_TEMPLATE.format(mode=mode))
+    name = cfg["study_area"]["name"]
+    net_cfg = cfg["network"]
+    unreachable = float(net_cfg["unreachable"])
+    highway_speeds = {k: float(v) for k, v in net_cfg["highway_speeds"].items()}
+    default_car_speed = float(net_cfg["default_car_speed_kmh"])
+    bike_speed = float(net_cfg["bike_speed_kmh"])
+
+    network_path = Path(f"data/processed/{name}_network_{mode}.graphml")
     graph = ox.load_graphml(network_path)
 
     if mode == "car":
-        _add_travel_time_car(graph)
+        _add_travel_time_car(graph, highway_speeds, default_car_speed)
     else:
-        _add_travel_time_bike(graph)
+        _add_travel_time_bike(graph, bike_speed)
 
-    # Project to EPSG:28992 so nearest_nodes uses a KD-tree (no scikit-learn).
+    # Project to EPSG:28992 so nearest_nodes uses a KD-tree.
     graph = ox.project_graph(graph, to_crs="EPSG:28992")
 
-    # Load zones, sorted for consistent ordering.
-    grid = pd.read_parquet(GRID)
+    grid = pd.read_parquet(f"data/processed/{name}_grid_clean.parquet")
     zone_ids: list[str] = sorted(grid["zone_id"].tolist())
     n_zones = len(zone_ids)
     print(f"Loaded {n_zones} zones")
 
-    # Snap zone centroids to nearest network nodes.
     eastings, northings = _centroids_from_zone_ids(zone_ids)
     nearest_nodes = ox.nearest_nodes(graph, eastings, northings)
 
-    # Build lookup: node -> list of zone indices.
     node_to_zones: dict[int, list[int]] = {}
     for i, node in enumerate(nearest_nodes):
         node_to_zones.setdefault(node, []).append(i)
@@ -165,8 +155,7 @@ def build_skim(mode: str) -> Path:
     unique_nodes = list(node_to_zones.keys())
     print(f"Snapped to {len(unique_nodes)} unique network nodes")
 
-    # Compute shortest paths from each unique origin node.
-    matrix = np.full((n_zones, n_zones), UNREACHABLE, dtype=np.float64)
+    matrix = np.full((n_zones, n_zones), unreachable, dtype=np.float64)
 
     for count, origin_node in enumerate(unique_nodes, 1):
         if count % 100 == 0 or count == len(unique_nodes):
@@ -187,16 +176,13 @@ def build_skim(mode: str) -> Path:
                     for di in dest_indices:
                         matrix[oi, di] = tt
 
-    # Diagonal = 0 (intra-zone travel time).
     np.fill_diagonal(matrix, 0.0)
 
-    # Write OMX.
-    output = Path(OUTPUT_TEMPLATE.format(mode=mode))
+    output = Path(f"data/processed/{name}_skim_{mode}.omx")
     output.parent.mkdir(parents=True, exist_ok=True)
 
     with omx.open_file(str(output), "w") as f:
         f["travel_time_min"] = matrix
-        # create_mapping only supports UInt32; write strings via PyTables.
         if "lookup" not in f.root:
             f.create_group(f.root, "lookup")
         max_len = max(len(z) for z in zone_ids)
@@ -206,9 +192,9 @@ def build_skim(mode: str) -> Path:
         )
         arr[:] = np.array(zone_ids, dtype=f"S{max_len}")
 
-    n_unreachable = int(np.sum(matrix == UNREACHABLE))
+    n_unreachable = int(np.sum(matrix == unreachable))
     pct = n_unreachable / (n_zones * n_zones) * 100
-    mean_tt = np.mean(matrix[matrix < UNREACHABLE])
+    mean_tt = np.mean(matrix[matrix < unreachable])
     print(f"Wrote {output}  shape={matrix.shape}")
     print(f"  mean travel time: {mean_tt:.1f} min")
     print(f"  unreachable pairs: {n_unreachable} ({pct:.1f}%)")
@@ -217,4 +203,5 @@ def build_skim(mode: str) -> Path:
 
 if __name__ == "__main__":
     args = parse_args()
-    build_skim(args.mode)
+    cfg = load_config()
+    build_skim(args.mode, cfg)

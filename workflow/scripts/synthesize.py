@@ -4,21 +4,23 @@ Reads the serialised ZoneSpecs, reconstructs them, runs
 synthesize_population(), and saves households/agents as parquet.
 """
 
+import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).parent))
+
+# isort: split
+
 import pandas as pd
+from _config import load_config
 
 from aibm.synthesis import ZoneSpec, synthesize_population
 
-INPUT = Path("data/processed/walcheren_zone_specs.parquet")
-OUTPUT = Path("data/processed/walcheren_population.parquet")
-
-SEED = 42
-
 
 def synthesize(
-    input_path: Path = INPUT,
-    output_path: Path = OUTPUT,
+    input_path: Path,
+    output_path: Path,
+    seed: int,
 ) -> Path:
     """Reconstruct ZoneSpecs and run synthesis."""
     df = pd.read_parquet(input_path)
@@ -46,9 +48,8 @@ def synthesize(
         specs.append(spec)
 
     print(f"Synthesising population for {len(specs)} zones")
-    households = synthesize_population(specs, seed=SEED)
+    households = synthesize_population(specs, seed=seed)
 
-    # Flatten to one row per agent with household info
     rows = []
     for hh_idx, hh in enumerate(households):
         for agent in hh.members:
@@ -73,4 +74,10 @@ def synthesize(
 
 
 if __name__ == "__main__":
-    synthesize()
+    cfg = load_config()
+    name = cfg["study_area"]["name"]
+    synthesize(
+        input_path=Path(f"data/processed/{name}_zone_specs.parquet"),
+        output_path=Path(f"data/processed/{name}_population.parquet"),
+        seed=cfg["synthesis"]["seed"],
+    )

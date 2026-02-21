@@ -1,111 +1,169 @@
-"""Snakemake workflow for Walcheren population synthesis.
+"""Snakemake workflow for the Walcheren example model.
 
 Run with:
     uv run snakemake --cores 1 -s workflow/Snakefile
 """
 
+configfile: "workflow/config.yaml"
+
+NAME = config["study_area"]["name"]
+MODES = config["network"]["modes"]
+
 
 rule all:
     input:
-        "data/processed/walcheren_population.parquet",
-        "data/processed/walcheren_skim_car.omx",
-        "data/processed/walcheren_skim_bike.omx",
-        "data/processed/walcheren_network_car_nodes.parquet",
-        "data/processed/walcheren_network_car_edges.parquet",
-        "data/processed/walcheren_network_bike_nodes.parquet",
-        "data/processed/walcheren_network_bike_edges.parquet",
-        "data/processed/walcheren_pois.parquet",
-        "data/processed/walcheren_pois.gpkg",
+        f"data/processed/{NAME}_population.parquet",
+        expand("data/processed/{NAME}_skim_{mode}.omx", NAME=NAME, mode=MODES),
+        expand(
+            "data/processed/{NAME}_network_{mode}_nodes.parquet",
+            NAME=NAME,
+            mode=MODES,
+        ),
+        expand(
+            "data/processed/{NAME}_network_{mode}_edges.parquet",
+            NAME=NAME,
+            mode=MODES,
+        ),
+        f"data/processed/{NAME}_pois.parquet",
+        f"data/processed/{NAME}_pois.gpkg",
+        f"data/processed/{NAME}_assigned_trips.parquet",
 
 
 rule download_boundaries:
     output:
-        "data/raw/walcheren_gemeenten.geojson",
+        f"data/raw/{NAME}_gemeenten.geojson",
     shell:
         "uv run python workflow/scripts/download_boundaries.py"
+        " --config workflow/config.yaml"
 
 
 rule download_network:
     input:
-        boundaries="data/raw/walcheren_gemeenten.geojson",
+        boundaries=f"data/raw/{NAME}_gemeenten.geojson",
     output:
-        "data/processed/walcheren_network_{mode}.graphml",
+        f"data/processed/{NAME}_network_{{mode}}.graphml",
     wildcard_constraints:
         mode="car|bike",
     shell:
         "uv run python workflow/scripts/download_network.py"
         " --mode {wildcards.mode}"
+        " --config workflow/config.yaml"
 
 
 rule build_skim:
     input:
-        network="data/processed/walcheren_network_{mode}.graphml",
-        grid="data/processed/walcheren_grid_clean.parquet",
+        network=f"data/processed/{NAME}_network_{{mode}}.graphml",
+        grid=f"data/processed/{NAME}_grid_clean.parquet",
     output:
-        "data/processed/walcheren_skim_{mode}.omx",
+        f"data/processed/{NAME}_skim_{{mode}}.omx",
     wildcard_constraints:
         mode="car|bike",
     shell:
         "uv run python workflow/scripts/build_skim.py"
         " --mode {wildcards.mode}"
+        " --config workflow/config.yaml"
 
 
 rule fetch_pois:
     input:
-        "data/raw/walcheren_gemeenten.geojson",
-        "data/processed/walcheren_grid_clean.parquet",
+        f"data/raw/{NAME}_gemeenten.geojson",
+        f"data/processed/{NAME}_grid_clean.parquet",
     output:
-        "data/processed/walcheren_pois.parquet",
-        "data/processed/walcheren_pois.gpkg",
+        f"data/processed/{NAME}_pois.parquet",
+        f"data/processed/{NAME}_pois.gpkg",
     shell:
         "uv run python workflow/scripts/fetch_pois.py"
+        " --config workflow/config.yaml"
 
 
 rule filter_grid:
     input:
-        grid="data/raw/2025-cbs_vk100_2024_v1.zip",
-        boundaries="data/raw/walcheren_gemeenten.geojson",
+        grid=f"data/raw/{config['grid']['raw_zip']}",
+        boundaries=f"data/raw/{NAME}_gemeenten.geojson",
     output:
-        "data/processed/walcheren_grid_raw.parquet",
+        f"data/processed/{NAME}_grid_raw.parquet",
     shell:
         "uv run python workflow/scripts/filter_grid.py"
+        " --config workflow/config.yaml"
 
 
 rule clean:
     input:
-        "data/processed/walcheren_grid_raw.parquet",
+        f"data/processed/{NAME}_grid_raw.parquet",
     output:
-        "data/processed/walcheren_grid_clean.parquet",
+        f"data/processed/{NAME}_grid_clean.parquet",
     shell:
         "uv run python workflow/scripts/clean_grid.py"
+        " --config workflow/config.yaml"
 
 
 rule build_specs:
     input:
-        "data/processed/walcheren_grid_clean.parquet",
+        f"data/processed/{NAME}_grid_clean.parquet",
     output:
-        "data/processed/walcheren_zone_specs.parquet",
+        f"data/processed/{NAME}_zone_specs.parquet",
     shell:
         "uv run python workflow/scripts/build_specs.py"
+        " --config workflow/config.yaml"
 
 
 rule synthesize:
     input:
-        "data/processed/walcheren_zone_specs.parquet",
+        f"data/processed/{NAME}_zone_specs.parquet",
     output:
-        "data/processed/walcheren_population.parquet",
+        f"data/processed/{NAME}_population.parquet",
     shell:
         "uv run python workflow/scripts/synthesize.py"
+        " --config workflow/config.yaml"
 
 
 rule export_network:
     input:
-        network="data/processed/walcheren_network_{mode}.graphml",
+        network=f"data/processed/{NAME}_network_{{mode}}.graphml",
     output:
-        nodes="data/processed/walcheren_network_{mode}_nodes.parquet",
-        edges="data/processed/walcheren_network_{mode}_edges.parquet",
+        nodes=f"data/processed/{NAME}_network_{{mode}}_nodes.parquet",
+        edges=f"data/processed/{NAME}_network_{{mode}}_edges.parquet",
     wildcard_constraints:
         mode="car|bike",
     shell:
         "uv run python workflow/scripts/export_network.py"
         " --mode {wildcards.mode}"
+        " --config workflow/config.yaml"
+
+
+rule sample_households:
+    input:
+        f"data/processed/{NAME}_population.parquet",
+    output:
+        f"data/processed/{NAME}_sample.parquet",
+    shell:
+        "uv run python workflow/scripts/sample_households.py"
+        " --config workflow/config.yaml"
+
+
+rule simulate:
+    input:
+        sample=f"data/processed/{NAME}_sample.parquet",
+        pois=f"data/processed/{NAME}_pois.parquet",
+        zone_specs=f"data/processed/{NAME}_zone_specs.parquet",
+        skim_car=f"data/processed/{NAME}_skim_car.omx",
+        skim_bike=f"data/processed/{NAME}_skim_bike.omx",
+    output:
+        trips=f"data/processed/{NAME}_trips.parquet",
+        day_plans=f"data/processed/{NAME}_day_plans.parquet",
+    shell:
+        "uv run python workflow/scripts/simulate.py"
+        " --config workflow/config.yaml"
+
+
+rule assign_network:
+    input:
+        trips=f"data/processed/{NAME}_trips.parquet",
+        network_car=f"data/processed/{NAME}_network_car.graphml",
+        network_bike=f"data/processed/{NAME}_network_bike.graphml",
+        grid=f"data/processed/{NAME}_grid_clean.parquet",
+    output:
+        f"data/processed/{NAME}_assigned_trips.parquet",
+    shell:
+        "uv run python workflow/scripts/assign_network.py"
+        " --config workflow/config.yaml"

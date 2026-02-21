@@ -1,51 +1,48 @@
-"""Download Walcheren municipality boundaries from PDOK WFS.
+"""Download municipality boundaries from PDOK WFS.
 
-Fetches polygons for Middelburg (GM0687), Veere (GM0717), and
-Vlissingen (GM0718) and saves them as GeoJSON.
+Fetches polygons for the configured municipalities and saves them
+as GeoJSON.
 """
 
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent))
+
+# isort: split
 
 import geopandas as gpd
 import requests
-
-WFS_BASE = "https://service.pdok.nl/cbs/gebiedsindelingen/2024/wfs/v1_0"
-LAYER = "gebiedsindelingen:gemeente_gegeneraliseerd"
-WALCHEREN_CODES = ["GM0687", "GM0717", "GM0718"]
-
-OUTPUT = Path("data/raw/walcheren_gemeenten.geojson")
-
-# OGC XML filter to select the three municipalities
-_XML_FILTER = (
-    '<Filter xmlns="http://www.opengis.net/ogc"><Or>'
-    "<PropertyIsEqualTo>"
-    "<PropertyName>statcode</PropertyName>"
-    "<Literal>GM0687</Literal>"
-    "</PropertyIsEqualTo>"
-    "<PropertyIsEqualTo>"
-    "<PropertyName>statcode</PropertyName>"
-    "<Literal>GM0717</Literal>"
-    "</PropertyIsEqualTo>"
-    "<PropertyIsEqualTo>"
-    "<PropertyName>statcode</PropertyName>"
-    "<Literal>GM0718</Literal>"
-    "</PropertyIsEqualTo>"
-    "</Or></Filter>"
-)
+from _config import load_config
 
 
-def download_boundaries(output: Path = OUTPUT) -> Path:
+def _build_xml_filter(codes: list[str]) -> str:
+    """Build an OGC XML filter that matches any of the given statcodes."""
+    equals = "".join(
+        "<PropertyIsEqualTo>"
+        "<PropertyName>statcode</PropertyName>"
+        f"<Literal>{code}</Literal>"
+        "</PropertyIsEqualTo>"
+        for code in codes
+    )
+    return f'<Filter xmlns="http://www.opengis.net/ogc"><Or>{equals}</Or></Filter>'
+
+
+def download_boundaries(output: Path, cfg: dict) -> Path:
     """Download and filter municipality boundaries."""
+    b = cfg["boundaries"]
+    codes: list[str] = b["municipality_codes"]
+
     resp = requests.get(
-        WFS_BASE,
+        b["wfs_url"],
         params={
             "service": "WFS",
             "version": "2.0.0",
             "request": "GetFeature",
-            "typeNames": LAYER,
+            "typeNames": b["wfs_layer"],
             "outputFormat": "json",
             "srsName": "EPSG:28992",
-            "Filter": _XML_FILTER,
+            "Filter": _build_xml_filter(codes),
         },
         timeout=60,
     )
@@ -53,9 +50,9 @@ def download_boundaries(output: Path = OUTPUT) -> Path:
 
     gdf = gpd.GeoDataFrame.from_features(resp.json()["features"], crs="EPSG:28992")
 
-    if len(gdf) != len(WALCHEREN_CODES):
+    if len(gdf) != len(codes):
         found = gdf["statcode"].tolist()
-        raise ValueError(f"Expected {WALCHEREN_CODES}, got {found}")
+        raise ValueError(f"Expected {codes}, got {found}")
 
     output.parent.mkdir(parents=True, exist_ok=True)
     gdf.to_file(output, driver="GeoJSON")
@@ -64,4 +61,6 @@ def download_boundaries(output: Path = OUTPUT) -> Path:
 
 
 if __name__ == "__main__":
-    download_boundaries()
+    cfg = load_config()
+    name = cfg["study_area"]["name"]
+    download_boundaries(Path(f"data/raw/{name}_gemeenten.geojson"), cfg)
