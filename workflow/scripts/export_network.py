@@ -16,8 +16,8 @@ import geopandas as gpd
 import osmnx as ox
 
 NETWORK_TEMPLATE = "data/processed/walcheren_network_{mode}.graphml"
-NODES_TEMPLATE = "data/processed/walcheren_network_{mode}_nodes.geoparquet"
-EDGES_TEMPLATE = "data/processed/walcheren_network_{mode}_edges.geoparquet"
+NODES_TEMPLATE = "data/processed/walcheren_network_{mode}_nodes.parquet"
+EDGES_TEMPLATE = "data/processed/walcheren_network_{mode}_edges.parquet"
 
 
 def parse_args() -> argparse.Namespace:
@@ -48,9 +48,7 @@ def coerce_list_columns(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
             continue
         if gdf[col].apply(lambda x: isinstance(x, list)).any():
             gdf[col] = gdf[col].apply(
-                lambda x: "|".join(str(v) for v in x)
-                if isinstance(x, list)
-                else x
+                lambda x: "|".join(str(v) for v in x) if isinstance(x, list) else str(x)
             )
     return gdf
 
@@ -85,12 +83,11 @@ def export_network(mode: str) -> tuple[Path, Path]:
     nodes.to_parquet(nodes_out)
     edges.to_parquet(edges_out)
 
-    print(
-        f"Saved {mode} network: {len(nodes)} nodes to {nodes_out}"
-    )
-    print(
-        f"Saved {mode} network: {len(edges)} edges to {edges_out}"
-    )
+    nodes.to_file(nodes_out.with_suffix(".gpkg"), driver="GPKG")
+    edges.to_file(edges_out.with_suffix(".gpkg"), driver="GPKG")
+
+    print(f"Saved {mode} network: {len(nodes)} nodes to {nodes_out}")
+    print(f"Saved {mode} network: {len(edges)} edges to {edges_out}")
     return nodes_out, edges_out
 
 

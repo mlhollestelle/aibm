@@ -10,11 +10,10 @@ rule all:
         "data/processed/walcheren_population.parquet",
         "data/processed/walcheren_skim_car.omx",
         "data/processed/walcheren_skim_bike.omx",
-        "data/processed/walcheren_grid.geoparquet",
-        "data/processed/walcheren_network_car_nodes.geoparquet",
-        "data/processed/walcheren_network_car_edges.geoparquet",
-        "data/processed/walcheren_network_bike_nodes.geoparquet",
-        "data/processed/walcheren_network_bike_edges.geoparquet",
+        "data/processed/walcheren_network_car_nodes.parquet",
+        "data/processed/walcheren_network_car_edges.parquet",
+        "data/processed/walcheren_network_bike_nodes.parquet",
+        "data/processed/walcheren_network_bike_edges.parquet",
 
 
 rule download_boundaries:
@@ -86,21 +85,12 @@ rule synthesize:
         "uv run python workflow/scripts/synthesize.py"
 
 
-rule export_grid:
-    input:
-        "data/processed/walcheren_grid_clean.parquet",
-    output:
-        "data/processed/walcheren_grid.geoparquet",
-    shell:
-        "uv run python workflow/scripts/export_grid.py"
-
-
 rule export_network:
     input:
         network="data/processed/walcheren_network_{mode}.graphml",
     output:
-        nodes="data/processed/walcheren_network_{mode}_nodes.geoparquet",
-        edges="data/processed/walcheren_network_{mode}_edges.geoparquet",
+        nodes="data/processed/walcheren_network_{mode}_nodes.parquet",
+        edges="data/processed/walcheren_network_{mode}_edges.parquet",
     wildcard_constraints:
         mode="car|bike",
     shell:
