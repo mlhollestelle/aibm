@@ -15,6 +15,7 @@ rule all:
         "data/processed/walcheren_network_bike_nodes.parquet",
         "data/processed/walcheren_network_bike_edges.parquet",
         "data/processed/walcheren_pois.parquet",
+        "data/processed/walcheren_pois.gpkg",
 
 
 rule download_boundaries:
@@ -52,8 +53,10 @@ rule build_skim:
 rule fetch_pois:
     input:
         "data/raw/walcheren_gemeenten.geojson",
+        "data/processed/walcheren_grid_clean.parquet",
     output:
         "data/processed/walcheren_pois.parquet",
+        "data/processed/walcheren_pois.gpkg",
     shell:
         "uv run python workflow/scripts/fetch_pois.py"
 
