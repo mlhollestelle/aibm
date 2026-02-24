@@ -9,9 +9,64 @@ from aibm.llm import (
     GeminiClient,
     OpenAIClient,
     RateLimiter,
+    _strict_schema,
     _strip_code_fences,
     create_client,
 )
+
+# --- _strict_schema ---
+
+
+def test_strict_schema_adds_additional_properties_to_object() -> None:
+    schema = {"type": "object", "properties": {"x": {"type": "number"}}}
+    result = _strict_schema(schema)
+    assert result["additionalProperties"] is False
+
+
+def test_strict_schema_recurses_into_nested_object() -> None:
+    schema = {
+        "type": "object",
+        "properties": {
+            "child": {
+                "type": "object",
+                "properties": {"y": {"type": "string"}},
+            }
+        },
+    }
+    result = _strict_schema(schema)
+    assert result["additionalProperties"] is False
+    assert result["properties"]["child"]["additionalProperties"] is False
+
+
+def test_strict_schema_recurses_into_array_items() -> None:
+    schema = {
+        "type": "object",
+        "properties": {
+            "items": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {"z": {"type": "boolean"}},
+                },
+            }
+        },
+    }
+    result = _strict_schema(schema)
+    item_schema = result["properties"]["items"]["items"]
+    assert item_schema["additionalProperties"] is False
+
+
+def test_strict_schema_does_not_mutate_original() -> None:
+    schema = {"type": "object", "properties": {"x": {"type": "number"}}}
+    _strict_schema(schema)
+    assert "additionalProperties" not in schema
+
+
+def test_strict_schema_leaves_non_objects_unchanged() -> None:
+    schema = {"type": "string"}
+    result = _strict_schema(schema)
+    assert result == {"type": "string"}
+
 
 # --- _strip_code_fences ---
 
@@ -189,8 +244,9 @@ def test_openai_passes_schema_as_response_format() -> None:
     call_kwargs = inner.chat.completions.create.call_args.kwargs
     rf = call_kwargs["response_format"]
     assert rf["type"] == "json_schema"
-    assert rf["json_schema"]["schema"] == schema
     assert rf["json_schema"]["strict"] is True
+    sent_schema = rf["json_schema"]["schema"]
+    assert sent_schema["additionalProperties"] is False
 
 
 # --- create_client ---

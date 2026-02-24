@@ -27,6 +27,24 @@ class LLMClient(Protocol):
         ...
 
 
+def _strict_schema(schema: dict[str, Any]) -> dict[str, Any]:
+    """Return a copy of *schema* with ``additionalProperties: false`` on every object.
+
+    OpenAI's strict structured-output mode requires this on all object
+    nodes, including nested ones inside array items.
+    """
+    schema = dict(schema)
+    if schema.get("type") == "object":
+        schema["additionalProperties"] = False
+        if "properties" in schema:
+            schema["properties"] = {
+                k: _strict_schema(v) for k, v in schema["properties"].items()
+            }
+    if "items" in schema:
+        schema["items"] = _strict_schema(schema["items"])
+    return schema
+
+
 def _strip_code_fences(text: str) -> str:
     """Remove optional markdown code fences wrapping JSON."""
     stripped = text.strip()
@@ -186,7 +204,7 @@ class OpenAIClient:
     def __init__(
         self,
         client: Any = None,
-        max_tokens: int = 1024,
+        max_tokens: int = 4096,
     ) -> None:
         if client is None:
             import openai
@@ -209,7 +227,7 @@ class OpenAIClient:
                 "type": "json_schema",
                 "json_schema": {
                     "name": "response",
-                    "schema": schema,
+                    "schema": _strict_schema(schema),
                     "strict": True,
                 },
             },
