@@ -152,7 +152,7 @@ def _simulate_agent(
     skims: list[Skim],
     client: object,
     n_zone_candidates: int,
-) -> tuple[list[dict], dict]:
+) -> tuple[list[dict], dict, list[dict]]:
     """Run all LLM steps for one agent.
 
     Args:
@@ -165,8 +165,10 @@ def _simulate_agent(
         n_zone_candidates: Max zones offered for work/school choice.
 
     Returns:
-        Tuple of (trip_rows, day_plan_row). trip_rows is a list of
-        dicts, one per trip. day_plan_row is a single dict.
+        Tuple of (trip_rows, day_plan_row, activity_rows).
+        trip_rows is a list of dicts, one per trip.
+        day_plan_row is a single dict.
+        activity_rows is a list of dicts, one per routable activity.
     """
     agent.generate_persona(client, household=hh)  # type: ignore[arg-type]
 
@@ -203,28 +205,51 @@ def _simulate_agent(
     day_plan_row: dict = {
         "agent_id": agent.id,
         "household_id": hh.id,
+        "name": agent.name,
+        "age": agent.age,
+        "employment": agent.employment,
+        "has_license": agent.has_license,
+        "home_zone": agent.home_zone,
+        "work_zone": agent.work_zone,
+        "school_zone": agent.school_zone,
         "persona": agent.persona,
         "n_activities": len(routable),
         "n_tours": 0,
     }
 
     if not routable:
-        return [], day_plan_row
+        return [], day_plan_row, []
 
     day_plan: DayPlan = agent.schedule_activities(routable, client)  # type: ignore[arg-type]
     agent.build_tours(day_plan)
 
     day_plan_row["n_tours"] = len(day_plan.tours)
 
+    activity_rows: list[dict] = [
+        {
+            "agent_id": agent.id,
+            "household_id": hh.id,
+            "activity_seq": i,
+            "activity_type": act.type,
+            "location": act.location,
+            "start_time": act.start_time,
+            "end_time": act.end_time,
+            "is_flexible": act.is_flexible,
+        }
+        for i, act in enumerate(day_plan.activities)
+    ]
+
     trip_rows: list[dict] = []
     for tour_idx, tour in enumerate(day_plan.tours):
+        mode_reasoning: str | None = None
         if tour.trips:
             first_trip = tour.trips[0]
             options = _build_mode_options(
                 first_trip.origin, first_trip.destination, skims, hh
             )
             if options:
-                agent.choose_tour_mode(tour, options, client, hh)  # type: ignore[arg-type]
+                mc = agent.choose_tour_mode(tour, options, client, hh)  # type: ignore[arg-type]
+                mode_reasoning = mc.reasoning
 
         for trip_seq, trip in enumerate(tour.trips):
             trip_rows.append(
@@ -237,10 +262,13 @@ def _simulate_agent(
                     "destination": trip.destination,
                     "mode": trip.mode,
                     "departure_time": trip.departure_time,
+                    "arrival_time": trip.arrival_time,
+                    "distance": trip.distance,
+                    "mode_reasoning": mode_reasoning,
                 }
             )
 
-    return trip_rows, day_plan_row
+    return trip_rows, day_plan_row, activity_rows
 
 
 def simulate(cfg: dict) -> None:
@@ -269,35 +297,41 @@ def simulate(cfg: dict) -> None:
 
     all_trip_rows: list[dict] = []
     all_day_plan_rows: list[dict] = []
+    all_activity_rows: list[dict] = []
 
     for hh_id, group in sample.groupby("household_id"):
         hh = _reconstruct_household(int(hh_id), group, model)
         for agent in hh.members:
             try:
-                trip_rows, day_plan_row = _simulate_agent(
+                trip_rows, day_plan_row, activity_rows = _simulate_agent(
                     agent, hh, all_zones, all_pois, skims, client, n_zone_candidates
                 )
                 all_trip_rows.extend(trip_rows)
                 all_day_plan_rows.append(day_plan_row)
+                all_activity_rows.extend(activity_rows)
             except Exception as exc:
                 log.warning("Agent %s failed: %s", agent.name, exc)
 
     trips_df = pd.DataFrame(all_trip_rows)
     day_plans_df = pd.DataFrame(all_day_plan_rows)
+    activities_df = pd.DataFrame(all_activity_rows)
 
     out_dir = Path("data/processed")
     out_dir.mkdir(parents=True, exist_ok=True)
 
     trips_path = out_dir / f"{name}_trips.parquet"
     day_plans_path = out_dir / f"{name}_day_plans.parquet"
+    activities_path = out_dir / f"{name}_activities.parquet"
 
     trips_df.to_parquet(trips_path, index=False)
     day_plans_df.to_parquet(day_plans_path, index=False)
+    activities_df.to_parquet(activities_path, index=False)
 
     log.info(
-        "Wrote %d trips and %d day-plan rows",
+        "Wrote %d trips, %d day-plan rows, and %d activity rows",
         len(trips_df),
         len(day_plans_df),
+        len(activities_df),
     )
 
 
