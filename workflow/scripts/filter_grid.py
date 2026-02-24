@@ -25,9 +25,10 @@ def filter_grid(
     """Load CBS grid, spatial-filter to study area."""
     g = cfg["grid"]
     bbox = tuple(g["bbox"])
+    gpkg_file = g["gpkg_file"]
     gpkg_layer = g["gpkg_layer"]
 
-    gpkg_path = f"/vsizip/{cbs_zip}/{gpkg_layer}.gpkg"
+    gpkg_path = f"/vsizip/{cbs_zip}/{gpkg_file}"
     grid = gpd.read_file(
         gpkg_path,
         layer=gpkg_layer,
