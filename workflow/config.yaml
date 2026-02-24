@@ -37,8 +37,8 @@ synthesis:
   seed: 42
 
 simulation:
-  n_households: 100
+  n_households: 2
   seed: 42
-  model: "gpt-4o-mini"
+  model: "gpt-5-nano"
   rate_limit_rpm: 500
   n_zone_candidates: 12
