@@ -8,6 +8,7 @@ boundaries:
 
 grid:
   raw_zip: "2025-cbs_vk100_2024_v1.zip"
+  gpkg_file: "cbs_vk100_2024_v1.gpkg"
   gpkg_layer: "cbs_vk100_2024"
   bbox: [15000, 385000, 40000, 405000]
 
