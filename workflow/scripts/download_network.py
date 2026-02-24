@@ -37,7 +37,7 @@ def parse_args() -> argparse.Namespace:
         required=True,
         help="Transport mode (car or bike).",
     )
-    return parser.parse_args()
+    return parser.parse_known_args()[0]
 
 
 def download_network(
