@@ -203,7 +203,7 @@ class OpenAIClient:
     ) -> str:
         response = self._client.chat.completions.create(
             model=model,
-            max_tokens=self._max_tokens,
+            max_completion_tokens=self._max_tokens,
             messages=[{"role": "user", "content": prompt}],
             response_format={
                 "type": "json_schema",

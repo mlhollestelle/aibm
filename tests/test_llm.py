@@ -162,6 +162,20 @@ def test_openai_raises_on_empty_response() -> None:
         client.generate_json(model="gpt-4o", prompt="hello", schema={})
 
 
+def test_openai_uses_max_completion_tokens() -> None:
+    inner = MagicMock()
+    msg = MagicMock()
+    msg.content = '{"x": 1}'
+    inner.chat.completions.create.return_value.choices = [MagicMock(message=msg)]
+    client = OpenAIClient(client=inner, max_tokens=512)
+
+    client.generate_json(model="gpt-5-nano", prompt="hello", schema={})
+
+    call_kwargs = inner.chat.completions.create.call_args.kwargs
+    assert call_kwargs.get("max_completion_tokens") == 512
+    assert "max_tokens" not in call_kwargs
+
+
 def test_openai_passes_schema_as_response_format() -> None:
     inner = MagicMock()
     msg = MagicMock()
