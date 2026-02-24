@@ -170,6 +170,8 @@ def fetch_pois(
         # osmid lives in the index for osmnx ≥2
         if "osmid" not in gdf.columns:
             gdf = gdf.reset_index()
+            if "id" in gdf.columns and "osmid" not in gdf.columns:
+                gdf = gdf.rename(columns={"id": "osmid"})
             keep = [c for c in ["geometry", "name", "osmid"] if c in gdf.columns]
 
         gdf = gdf[keep].copy()
