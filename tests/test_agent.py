@@ -539,7 +539,8 @@ def test_choose_destination_with_pois_sets_location() -> None:
     activity = Activity(type="shopping")
     mock = _mock_destination_client("poi:101")
     result = agent.choose_destination(activity, pois=POIS, client=mock)
-    assert result.location == "101"
+    assert result.location == "zone_a"
+    assert result.poi_id == "101"
 
 
 def test_choose_destination_poi_prompt_contains_names() -> None:
@@ -559,7 +560,8 @@ def test_choose_destination_with_both_zones_and_pois() -> None:
     result = agent.choose_destination(
         activity, candidates=ZONES, pois=POIS, client=mock
     )
-    assert result.location == "101"
+    assert result.location == "zone_a"
+    assert result.poi_id == "101"
     prompt = mock.generate_json.call_args.kwargs["prompt"]
     # Both zones and POIs appear in the prompt
     assert "City Centre" in prompt
@@ -572,6 +574,7 @@ def test_choose_destination_strips_prefix_from_raw_id() -> None:
     mock = _mock_destination_client("zone:zone_b")
     result = agent.choose_destination(activity, candidates=ZONES, client=mock)
     assert result.location == "zone_b"
+    assert result.poi_id is None
 
 
 def test_choose_destination_handles_bare_id() -> None:

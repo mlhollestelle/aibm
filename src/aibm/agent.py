@@ -569,11 +569,19 @@ class Agent:
 
         data = json.loads(text)
         raw_id: str = data["destination_id"]
-        # Strip the prefix so location stores a plain id.
+        # Strip the prefix so we get a plain id.
         if raw_id.startswith("poi:") or raw_id.startswith("zone:"):
-            activity.location = raw_id.split(":", 1)[1]
+            chosen_id = raw_id.split(":", 1)[1]
         else:
-            activity.location = raw_id
+            chosen_id = raw_id
+
+        poi_lookup = {p.id: p for p in (pois or [])}
+        if chosen_id in poi_lookup:
+            poi = poi_lookup[chosen_id]
+            activity.poi_id = poi.id
+            activity.location = poi.zone_id if poi.zone_id is not None else poi.id
+        else:
+            activity.location = chosen_id
         return activity
 
     def schedule_activities(

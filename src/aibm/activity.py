@@ -37,6 +37,7 @@ class Activity:
 
     type: str
     location: str | None = None
+    poi_id: str | None = None
     start_time: float | None = None
     end_time: float | None = None
     is_flexible: bool = True
