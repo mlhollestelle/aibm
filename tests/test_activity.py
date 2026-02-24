@@ -18,6 +18,11 @@ def test_activity_is_flexible_by_default() -> None:
     assert activity.is_flexible is True
 
 
+def test_activity_poi_id_defaults_to_none() -> None:
+    act = Activity(type="shopping")
+    assert act.poi_id is None
+
+
 def test_activity_with_all_fields() -> None:
     activity = Activity(
         type="work",

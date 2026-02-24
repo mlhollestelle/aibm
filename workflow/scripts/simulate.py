@@ -232,6 +232,7 @@ def _simulate_agent(
             "activity_seq": i,
             "activity_type": act.type,
             "location": act.location,
+            "poi_id": act.poi_id,
             "start_time": act.start_time,
             "end_time": act.end_time,
             "is_flexible": act.is_flexible,
