@@ -20,6 +20,60 @@
 </head>
 <body>
   <div id="map-container"></div>
+
+  <!-- Loading overlay -->
+  <div id="loading-overlay"><div class="spinner"></div></div>
+
+  <!-- Map legend -->
+  <div id="legend">
+    <div class="leg-row">
+      <span class="leg-dot" style="background:#4285F4"></span>
+      <span class="leg-label">Car</span>
+    </div>
+    <div class="leg-row">
+      <span class="leg-dot" style="background:#34A853"></span>
+      <span class="leg-label">Bike</span>
+    </div>
+    <div class="leg-row">
+      <span class="leg-dot" style="background:#FBBC04"></span>
+      <span class="leg-label">Transit</span>
+    </div>
+    <div class="leg-row">
+      <span class="leg-dot" style="background:#EA4335"></span>
+      <span class="leg-label">Walk</span>
+    </div>
+    <div class="leg-row">
+      <span class="leg-dot" style="background:#9E9E9E"></span>
+      <span class="leg-label">Activity</span>
+    </div>
+    <div class="leg-row">
+      <span class="leg-dot" style="background:#646478"></span>
+      <span class="leg-label">Home</span>
+    </div>
+  </div>
+
+  <div id="tooltip"></div>
+
+  <!-- Time controls bar -->
+  <div id="time-bar">
+    <button id="btn-play" title="Play / Pause">Play</button>
+    <select id="select-speed" title="Playback speed">
+      <option value="1">1x</option>
+      <option value="10" selected>10x</option>
+      <option value="60">60x</option>
+      <option value="120">120x</option>
+    </select>
+    <input
+      id="slider-time"
+      type="range"
+      min="0"
+      max="1440"
+      step="1"
+      value="360"
+    />
+    <span id="label-time">06:00</span>
+  </div>
+
   <div id="side-panel">
     <h2>AIBM</h2>
     <p class="subtitle">Agent-Based Travel Demand Model</p>
@@ -29,6 +83,8 @@
 
   <!-- App scripts -->
   <script src="js/layers.js"></script>
+  <script src="js/animation.js"></script>
+  <script src="js/panels.js"></script>
   <script src="js/main.js"></script>
 </body>
 </html>

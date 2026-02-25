@@ -1,9 +1,17 @@
 /* layers.js — deck.gl layer definitions */
 
+// Mode colours: [R, G, B]
+const MODE_COLORS = {
+  car: [66, 133, 244],    // blue
+  bike: [52, 168, 83],    // green
+  transit: [251, 188, 4], // yellow
+  walk: [234, 67, 53],    // red
+};
+const ACTIVITY_COLOR = [158, 158, 158]; // grey
+const HOME_COLOR = [100, 100, 120];     // muted
+
 /**
  * Create the static network GeoJsonLayer.
- * @param {object|null} data - GeoJSON FeatureCollection or null
- * @returns {GeoJsonLayer}
  */
 function createNetworkLayer(data) {
   return new deck.GeoJsonLayer({
@@ -19,24 +27,47 @@ function createNetworkLayer(data) {
 }
 
 /**
- * Create the agent ScatterplotLayer.
- * Each agent object must have a `home` property: [lon, lat].
- * @param {Array} agents - array of agent objects
+ * Create the animated agent ScatterplotLayer.
+ * @param {Array} positions - [{lon, lat, r, g, b, radius, agent}]
  * @param {Function} onHover - hover callback
- * @returns {ScatterplotLayer}
+ * @param {Function} onClick - click callback
  */
-function createAgentLayer(agents, onHover) {
+function createAgentLayer(positions, onHover, onClick) {
   return new deck.ScatterplotLayer({
     id: "agents",
-    data: agents,
-    getPosition: (d) => d.home,
-    getRadius: 40,
-    getFillColor: [66, 133, 244, 200],
+    data: positions,
+    getPosition: (d) => [d.lon, d.lat],
+    getRadius: (d) => d.radius,
+    getFillColor: (d) => [d.r, d.g, d.b, 200],
     radiusMinPixels: 4,
-    radiusMaxPixels: 12,
+    radiusMaxPixels: 14,
     pickable: true,
     onHover: onHover,
+    onClick: onClick,
     autoHighlight: true,
     highlightColor: [233, 69, 96, 255],
+    updateTriggers: {
+      getPosition: positions,
+      getFillColor: positions,
+      getRadius: positions,
+    },
+  });
+}
+
+/**
+ * Create a PathLayer highlighting the selected agent's
+ * current route.
+ * @param {Array} route - [[lon, lat], ...]
+ */
+function createRouteLayer(route) {
+  return new deck.PathLayer({
+    id: "selected-route",
+    data: [{ path: route }],
+    getPath: (d) => d.path,
+    getColor: [233, 69, 96, 200],
+    getWidth: 4,
+    widthMinPixels: 3,
+    widthMaxPixels: 6,
+    pickable: false,
   });
 }
