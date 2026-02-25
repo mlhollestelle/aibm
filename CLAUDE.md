@@ -37,20 +37,26 @@ aibm/
 │   │   ├── tour.py            # Tour (chain of trips from/to home)
 │   │   ├── day_plan.py        # Full-day activity schedule for an agent
 │   │   ├── synthesis.py       # Population synthesis (create agents from specs)
-│   │   ├── llm.py             # LLM client wrappers (Anthropic, Gemini)
+│   │   ├── llm.py             # LLM client wrappers (Anthropic, Gemini, OpenAI)
 │   │   └── __init__.py        # Public API exports
 │   └── synth_pop/             # Synthetic population helpers (WIP)
 ├── workflow/                  # Snakemake pipeline for the Walcheren example model
 │   ├── Snakefile              # Pipeline definition and rules
+│   ├── config.yaml            # Pipeline configuration (study area, network, simulation)
 │   └── scripts/               # One script per pipeline step
+│       ├── _config.py              # Shared --config flag loader
 │       ├── download_boundaries.py  # Download study area boundary
 │       ├── download_network.py     # Download OSM road network
 │       ├── clean_grid.py           # Clean CBS grid data
 │       ├── filter_grid.py          # Filter grid to study area
 │       ├── build_specs.py          # Build zone specs from grid
 │       ├── synthesize.py           # Run population synthesis
+│       ├── sample_households.py    # Sample households for simulation
 │       ├── build_skim.py           # Compute travel time skim matrix
-│       └── export_network.py       # Export network as GeoParquet
+│       ├── export_network.py       # Export network as GeoParquet
+│       ├── fetch_pois.py           # Fetch POIs from OSM
+│       ├── simulate.py             # Run LLM-based day-plan simulation
+│       └── assign_network.py       # All-or-nothing network assignment
 ├── tests/                     # pytest test suite (mirrors src/aibm/)
 ├── notebooks/                 # Jupyter notebooks for exploration
 ├── scripts/                   # Ad-hoc development and experiment scripts
@@ -72,6 +78,11 @@ aibm/
   (`uv sync --group pipeline`).
 * Raw data goes in `data/raw/`, processed outputs in
   `data/processed/`.
+* All pipeline settings (study area name, network modes, simulation
+  LLM model, number of households, etc.) live in `workflow/config.yaml`.
+  Scripts accept a `--config` flag to override the default path.
+* Full pipeline end product is `{name}_assigned_trips.parquet` — trips
+  with per-agent routes (node sequences) from all-or-nothing assignment.
 * Run the pipeline:
   `uv run snakemake --cores 1 -s workflow/Snakefile`
 
