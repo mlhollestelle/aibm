@@ -1,7 +1,7 @@
 """All-or-nothing network assignment for simulated trips.
 
-Finds the shortest-path route for each trip and counts how many
-trips use each network edge.
+Finds the shortest-path route for each trip and stores the
+individual route (sequence of network node IDs) per agent trip.
 
 Usage:
     uv run python workflow/scripts/assign_network.py
@@ -9,7 +9,6 @@ Usage:
 
 import re
 import sys
-from collections import defaultdict
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -92,7 +91,14 @@ def _is_zone_id(loc: str) -> bool:
 
 
 def assign_network(cfg: dict) -> Path:
-    """Run assignment and write flow parquet."""
+    """Route each trip and store the node sequence per agent.
+
+    Each row in the output parquet corresponds to one trip from
+    the input, enriched with a ``route_nodes`` column that holds
+    the ordered list of network node IDs forming the shortest
+    path.  Trips that cannot be routed (same O/D node, no path,
+    non-zone locations) are included with an empty route list.
+    """
     name = cfg["study_area"]["name"]
     net_cfg = cfg["network"]
     highway_speeds = {k: float(v) for k, v in net_cfg["highway_speeds"].items()}
@@ -111,55 +117,68 @@ def assign_network(cfg: dict) -> Path:
             _add_travel_time_bike(g, bike_speed)
         mode_graphs[mode] = ox.project_graph(g, to_crs="EPSG:28992")
 
-    # flow[(mode, u, v)] -> count
-    flow: dict[tuple[str, int, int], int] = defaultdict(int)
-
+    # Pre-compute zone-to-node mapping per mode so we snap once.
+    mode_zone_to_node: dict[str, dict[str, int]] = {}
     for mode, graph in mode_graphs.items():
         mode_trips = trips[trips["mode"] == mode]
         if mode_trips.empty:
+            mode_zone_to_node[mode] = {}
             continue
-
-        # Collect unique zone ids that appear as origin or destination.
         all_locs = set(mode_trips["origin"].tolist()) | set(
             mode_trips["destination"].tolist()
         )
         zone_locs = [loc for loc in all_locs if _is_zone_id(loc)]
         if not zone_locs:
+            mode_zone_to_node[mode] = {}
             continue
-
         eastings, northings = _centroids_from_zone_ids(zone_locs)
         nearest = ox.nearest_nodes(graph, eastings, northings)
-        zone_to_node: dict[str, int] = dict(zip(zone_locs, nearest))
+        mode_zone_to_node[mode] = dict(zip(zone_locs, nearest))
 
-        for _, row in mode_trips.iterrows():
-            origin = str(row["origin"])
-            dest = str(row["destination"])
-            if origin not in zone_to_node or dest not in zone_to_node:
-                continue
-            o_node = zone_to_node[origin]
-            d_node = zone_to_node[dest]
-            if o_node == d_node:
-                continue
-            try:
-                path = nx.shortest_path(graph, o_node, d_node, weight="travel_time_min")
-            except (nx.NetworkXNoPath, nx.NodeNotFound):
-                continue
+    # Route each trip individually.
+    route_nodes: list[list[int]] = []
+    for _, row in trips.iterrows():
+        mode = row.get("mode")
+        origin = str(row["origin"])
+        dest = str(row["destination"])
 
-            for u, v in zip(path[:-1], path[1:]):
-                flow[(mode, u, v)] += 1
+        if mode not in mode_graphs:
+            route_nodes.append([])
+            continue
 
-    rows = [
-        {"mode": mode, "u": u, "v": v, "flow": count}
-        for (mode, u, v), count in flow.items()
-        if count > 0
-    ]
-    result = pd.DataFrame(rows)
+        zone_to_node = mode_zone_to_node[mode]
+        if origin not in zone_to_node or dest not in zone_to_node:
+            route_nodes.append([])
+            continue
+
+        o_node = zone_to_node[origin]
+        d_node = zone_to_node[dest]
+        if o_node == d_node:
+            route_nodes.append([])
+            continue
+
+        try:
+            path: list[int] = nx.shortest_path(
+                mode_graphs[mode],
+                o_node,
+                d_node,
+                weight="travel_time_min",
+            )
+        except (nx.NetworkXNoPath, nx.NodeNotFound):
+            route_nodes.append([])
+            continue
+
+        route_nodes.append(path)
+
+    result = trips.copy()
+    result["route_nodes"] = route_nodes
 
     output = Path(f"data/processed/{name}_assigned_trips.parquet")
     output.parent.mkdir(parents=True, exist_ok=True)
     result.to_parquet(output, index=False)
 
-    print(f"Wrote {len(result)} loaded edges to {output}")
+    n_routed = sum(1 for r in route_nodes if r)
+    print(f"Wrote {len(result)} trips ({n_routed} routed) to {output}")
     return output
 
 
