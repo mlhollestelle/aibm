@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AIBM — Agent Travel Visualisation</title>
+
+  <!-- MapLibre GL JS -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css"
+  />
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+
+  <!-- deck.gl standalone bundle -->
+  <script src="https://unpkg.com/deck.gl@9.1.4/dist.min.js"></script>
+
+  <!-- App styles -->
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="map-container"></div>
+  <div id="side-panel">
+    <h2>AIBM</h2>
+    <p class="subtitle">Agent-Based Travel Demand Model</p>
+    <div id="kpi-area"></div>
+    <div id="detail-area"></div>
+  </div>
+
+  <!-- App scripts -->
+  <script src="js/layers.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
