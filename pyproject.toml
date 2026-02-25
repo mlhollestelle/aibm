@@ -25,6 +25,10 @@ dev = [
 notebooks = [
     "jupyterlab>=4.0",
 ]
+webapp = [
+    "fastapi>=0.115",
+    "uvicorn>=0.34",
+]
 pipeline = [
     "geopandas>=1.0",
     "numpy>=1.26",

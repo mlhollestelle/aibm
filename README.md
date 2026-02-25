@@ -123,3 +123,19 @@ The pipeline steps are:
 5. **synthesize** — generate synthetic population
 
 Output lands in `data/processed/walcheren_population.parquet`.
+
+## Web app
+
+Visualise simulation results on an interactive map.
+
+```sh
+uv sync --group webapp
+
+# Prepare data (after running the pipeline)
+uv run python webapp/prepare_data.py --config workflow/config.yaml
+
+# Start the server
+uv run uvicorn webapp.app:app --reload
+```
+
+Open http://127.0.0.1:8000 in your browser.
