@@ -2,13 +2,13 @@
 
 // Mode colours: [R, G, B]
 const MODE_COLORS = {
-  car: [66, 133, 244],    // blue
-  bike: [52, 168, 83],    // green
-  transit: [251, 188, 4], // yellow
-  walk: [234, 67, 53],    // red
+  car: [45, 114, 210],    // blue
+  bike: [41, 166, 52],    // green
+  transit: [209, 152, 11], // gold
+  walk: [205, 66, 70],    // red
 };
-const ACTIVITY_COLOR = [158, 158, 158]; // grey
-const HOME_COLOR = [100, 100, 120];     // muted
+const ACTIVITY_COLOR = [115, 128, 145]; // grey
+const HOME_COLOR = [64, 72, 84];        // dark grey
 
 /**
  * Create the static network GeoJsonLayer.
@@ -45,7 +45,7 @@ function createAgentLayer(positions, onHover, onClick) {
     onHover: onHover,
     onClick: onClick,
     autoHighlight: true,
-    highlightColor: [233, 69, 96, 255],
+    highlightColor: [45, 114, 210, 255],
     updateTriggers: {
       getPosition: positions,
       getFillColor: positions,
@@ -64,7 +64,7 @@ function createRouteLayer(route) {
     id: "selected-route",
     data: [{ path: route }],
     getPath: (d) => d.path,
-    getColor: [233, 69, 96, 200],
+    getColor: [45, 114, 210, 200],
     getWidth: 4,
     widthMinPixels: 3,
     widthMaxPixels: 6,

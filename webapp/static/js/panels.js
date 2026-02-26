@@ -107,7 +107,7 @@ function renderDepartureHistogram(trips) {
     bars +=
       `<rect x="${x}" y="${y}" ` +
       `width="${barW}" height="${h}" ` +
-      `fill="#e94560" opacity="0.8" rx="1">` +
+      `fill="#2d72d2" opacity="0.8" rx="1">` +
       `<title>${formatTime(b)}: ${count} trips</title>` +
       `</rect>`;
   }
@@ -124,7 +124,7 @@ function renderDepartureHistogram(trips) {
       * svgW;
     labels +=
       `<text x="${x}" y="${svgH}" ` +
-      `fill="#888" font-size="9" ` +
+      `fill="#738091" font-size="9" ` +
       `text-anchor="middle">${formatTime(m)}</text>`;
   }
 
