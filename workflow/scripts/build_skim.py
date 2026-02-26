@@ -37,9 +37,9 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--mode",
-        choices=["car", "bike"],
+        choices=["car", "bike", "walk"],
         required=True,
-        help="Transport mode (car or bike).",
+        help="Transport mode (car, bike, or walk).",
     )
     return parser.parse_known_args()[0]
 
@@ -96,6 +96,16 @@ def _add_travel_time_bike(
         data["travel_time_min"] = (length_km / bike_speed) * 60.0
 
 
+def _add_travel_time_walk(
+    graph: nx.MultiDiGraph,
+    walk_speed: float,
+) -> None:
+    """Add ``travel_time_min`` edge attribute for walk mode."""
+    for _, _, data in graph.edges(data=True):
+        length_km = data["length"] / 1000.0
+        data["travel_time_min"] = (length_km / walk_speed) * 60.0
+
+
 def _centroids_from_zone_ids(
     zone_ids: list[str],
 ) -> tuple[np.ndarray, np.ndarray]:
@@ -128,14 +138,17 @@ def build_skim(mode: str, cfg: dict) -> Path:
     highway_speeds = {k: float(v) for k, v in net_cfg["highway_speeds"].items()}
     default_car_speed = float(net_cfg["default_car_speed_kmh"])
     bike_speed = float(net_cfg["bike_speed_kmh"])
+    walk_speed = float(net_cfg["walk_speed_kmh"])
 
     network_path = Path(f"data/processed/{name}_network_{mode}.graphml")
     graph = ox.load_graphml(network_path)
 
     if mode == "car":
         _add_travel_time_car(graph, highway_speeds, default_car_speed)
-    else:
+    elif mode == "bike":
         _add_travel_time_bike(graph, bike_speed)
+    else:
+        _add_travel_time_walk(graph, walk_speed)
 
     # Project to EPSG:28992 so nearest_nodes uses a KD-tree.
     graph = ox.project_graph(graph, to_crs="EPSG:28992")

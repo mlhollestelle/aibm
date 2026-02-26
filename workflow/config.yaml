@@ -13,8 +13,9 @@ grid:
   bbox: [15000, 385000, 40000, 405000]
 
 network:
-  modes: ["car", "bike"]
+  modes: ["car", "bike", "walk"]
   bike_speed_kmh: 18.0
+  walk_speed_kmh: 5.0
   default_car_speed_kmh: 30.0
   unreachable: 999.0
   highway_speeds:
@@ -42,3 +43,14 @@ simulation:
   model: "gpt-4o-mini"
   rate_limit_rpm: 500
   n_zone_candidates: 12
+
+transit:
+  enabled: true
+  route_types: ["bus", "train", "tram", "ferry"]
+  bus_speed_kmh: 20.0
+  train_speed_kmh: 80.0
+  tram_speed_kmh: 25.0
+  ferry_speed_kmh: 15.0
+  walk_speed_kmh: 5.0
+  max_walk_to_stop_m: 800
+  avg_wait_min: 10.0
