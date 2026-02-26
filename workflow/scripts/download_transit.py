@@ -21,30 +21,48 @@ sys.path.insert(0, str(Path(__file__).parent))
 import networkx as nx
 import requests
 from _config import load_config
+from pyproj import Transformer
+from shapely.geometry import shape
+from shapely.ops import transform, unary_union
+
+_OVERPASS_POLY_LIMIT = 100
 
 
 def _build_polygon_str(boundaries: Path) -> str:
-    """Convert boundary GeoJSON to Overpass poly: string (lat lon pairs)."""
+    """Convert boundary GeoJSON to Overpass poly: string (lat lon pairs).
+
+    Handles projected CRS by reprojecting to WGS84, then dissolves and
+    simplifies to stay within Overpass's 100-coordinate poly: limit.
+    """
     with open(boundaries) as f:
         geojson = json.load(f)
 
-    coords: list[tuple[float, float]] = []
-    for feature in geojson.get("features", []):
-        geom = feature.get("geometry", {})
-        geom_type = geom.get("type")
-        if geom_type == "Polygon":
-            rings = [geom["coordinates"]]
-        elif geom_type == "MultiPolygon":
-            rings = geom["coordinates"]
-        else:
-            continue
-        for polygon in rings:
-            for lon, lat in polygon[0]:  # outer ring only
-                coords.append((lat, lon))
+    crs_name = geojson.get("crs", {}).get("properties", {}).get("name", "EPSG:4326")
 
-    if not coords:
+    def reproject(geom):
+        if "28992" in crs_name or "RD" in crs_name:
+            t = Transformer.from_crs("EPSG:28992", "EPSG:4326", always_xy=True)
+            return transform(t.transform, geom)
+        return geom
+
+    shapes = [
+        reproject(shape(feat["geometry"]))
+        for feat in geojson.get("features", [])
+        if feat.get("geometry")
+    ]
+    if not shapes:
         raise ValueError("No polygon coordinates found in boundaries file")
 
+    # Convex hull guarantees a single Polygon regardless of island geometry.
+    dissolved = unary_union(shapes).convex_hull
+    # Simplify until the exterior ring fits within the Overpass limit.
+    tolerance = 0.0
+    while len(dissolved.exterior.coords) > _OVERPASS_POLY_LIMIT:
+        tolerance += 0.0001
+        dissolved = unary_union(shapes).convex_hull.simplify(tolerance)
+
+    # Overpass poly: expects "lat lon lat lon ..." (i.e. y x).
+    coords = [(lat, lon) for lon, lat in dissolved.exterior.coords[:-1]]
     return " ".join(f"{lat} {lon}" for lat, lon in coords)
 
 
