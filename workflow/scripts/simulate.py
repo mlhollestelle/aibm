@@ -12,6 +12,7 @@ import logging
 import math
 import re
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -308,13 +309,36 @@ def simulate(cfg: dict) -> None:
     all_day_plan_rows: list[dict] = []
     all_activity_rows: list[dict] = []
 
+    # Build all (agent, hh) pairs up front.
+    agent_tasks: list[tuple] = []
     for hh_id, group in sample.groupby("household_id"):
         hh = _reconstruct_household(int(hh_id), group, model)
         for agent in hh.members:
+            agent_tasks.append((agent, hh))
+
+    max_workers = sim.get("max_workers", 4)
+    log.info("Simulating %d agents with %d workers", len(agent_tasks), max_workers)
+
+    # Submit all agents to the thread pool.
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        futures = {
+            pool.submit(
+                _simulate_agent,
+                agent,
+                hh,
+                all_zones,
+                all_pois,
+                skims,
+                client,
+                n_zone_candidates,
+            ): agent
+            for agent, hh in agent_tasks
+        }
+        # Collect results as they complete.
+        for future in as_completed(futures):
+            agent = futures[future]
             try:
-                trip_rows, day_plan_row, activity_rows = _simulate_agent(
-                    agent, hh, all_zones, all_pois, skims, client, n_zone_candidates
-                )
+                trip_rows, day_plan_row, activity_rows = future.result()
                 all_trip_rows.extend(trip_rows)
                 all_day_plan_rows.append(day_plan_row)
                 all_activity_rows.extend(activity_rows)

@@ -335,3 +335,30 @@ def test_rate_limiter_default_values() -> None:
     limiter = RateLimiter(inner)
     assert limiter._max_calls == 50
     assert limiter._window == 60.0
+
+
+def test_rate_limiter_is_thread_safe() -> None:
+    """Concurrent threads must not crash or lose calls."""
+    import threading
+
+    inner = MagicMock()
+    inner.generate_json.return_value = "{}"
+    # max_calls > thread count so no sleeping — tests data safety only.
+    limiter = RateLimiter(inner, max_calls=20, window=60.0)
+
+    errors: list[Exception] = []
+
+    def call() -> None:
+        try:
+            limiter.generate_json(model="m", prompt="p", schema={})
+        except Exception as exc:
+            errors.append(exc)
+
+    threads = [threading.Thread(target=call) for _ in range(10)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert not errors
+    assert inner.generate_json.call_count == 10
