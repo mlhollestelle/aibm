@@ -62,7 +62,7 @@ def _make_employed_setup() -> tuple:
 def test_simulate_agent_produces_trips():
     agent, hh, zones, skims, client = _make_employed_setup()
 
-    trip_rows, day_plan_row = _simulate_agent(
+    trip_rows, day_plan_row, _ = _simulate_agent(
         agent, hh, zones, [], skims, client, n_zone_candidates=5
     )
 
@@ -76,7 +76,7 @@ def test_simulate_agent_produces_trips():
 def test_simulate_agent_day_plan_row():
     agent, hh, zones, skims, client = _make_employed_setup()
 
-    _, day_plan_row = _simulate_agent(
+    _, day_plan_row, _ = _simulate_agent(
         agent, hh, zones, [], skims, client, n_zone_candidates=5
     )
 
@@ -90,7 +90,7 @@ def test_simulate_agent_day_plan_row():
 def test_simulate_agent_mode_assigned():
     agent, hh, zones, skims, client = _make_employed_setup()
 
-    trip_rows, _ = _simulate_agent(
+    trip_rows, _, _ = _simulate_agent(
         agent, hh, zones, [], skims, client, n_zone_candidates=5
     )
 
@@ -124,7 +124,7 @@ def test_simulate_agent_no_vehicles_excludes_car():
         json.dumps({"reasoning": "Only bike available.", "choice": "bike"}),
     )
 
-    trip_rows, _ = _simulate_agent(
+    trip_rows, _, _ = _simulate_agent(
         agent, hh, zones, [], [bike_skim], client, n_zone_candidates=5
     )
 

@@ -23,6 +23,7 @@ from _config import load_config
 MODE_TO_NETWORK_TYPE = {
     "car": "drive",
     "bike": "bike",
+    "walk": "walk",
 }
 
 
@@ -33,9 +34,9 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--mode",
-        choices=["car", "bike"],
+        choices=["car", "bike", "walk"],
         required=True,
-        help="Transport mode (car or bike).",
+        help="Transport mode (car, bike, or walk).",
     )
     return parser.parse_known_args()[0]
 

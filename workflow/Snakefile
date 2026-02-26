@@ -8,6 +8,7 @@ configfile: "workflow/config.yaml"
 
 NAME = config["study_area"]["name"]
 MODES = config["network"]["modes"]
+TRANSIT = config.get("transit", {}).get("enabled", False)
 
 
 rule all:
@@ -27,6 +28,8 @@ rule all:
         f"data/processed/{NAME}_pois.parquet",
         f"data/processed/{NAME}_pois.gpkg",
         f"data/processed/{NAME}_assigned_trips.parquet",
+        *([f"data/processed/{NAME}_transit_stops.graphml",
+           f"data/processed/{NAME}_skim_transit.omx"] if TRANSIT else []),
 
 
 rule download_boundaries:
@@ -43,7 +46,7 @@ rule download_network:
     output:
         f"data/processed/{NAME}_network_{{mode}}.graphml",
     wildcard_constraints:
-        mode="car|bike",
+        mode="car|bike|walk",
     shell:
         "uv run python workflow/scripts/download_network.py"
         " --mode {wildcards.mode}"
@@ -57,7 +60,7 @@ rule build_skim:
     output:
         f"data/processed/{NAME}_skim_{{mode}}.omx",
     wildcard_constraints:
-        mode="car|bike",
+        mode="car|bike|walk",
     shell:
         "uv run python workflow/scripts/build_skim.py"
         " --mode {wildcards.mode}"
@@ -124,7 +127,7 @@ rule export_network:
         nodes=f"data/processed/{NAME}_network_{{mode}}_nodes.parquet",
         edges=f"data/processed/{NAME}_network_{{mode}}_edges.parquet",
     wildcard_constraints:
-        mode="car|bike",
+        mode="car|bike|walk",
     shell:
         "uv run python workflow/scripts/export_network.py"
         " --mode {wildcards.mode}"
@@ -146,8 +149,12 @@ rule simulate:
         sample=f"data/processed/{NAME}_sample.parquet",
         pois=f"data/processed/{NAME}_pois.parquet",
         zone_specs=f"data/processed/{NAME}_zone_specs.parquet",
-        skim_car=f"data/processed/{NAME}_skim_car.omx",
-        skim_bike=f"data/processed/{NAME}_skim_bike.omx",
+        skims=expand(
+            "data/processed/{NAME}_skim_{mode}.omx", NAME=NAME, mode=MODES
+        ),
+        skim_transit=(
+            [f"data/processed/{NAME}_skim_transit.omx"] if TRANSIT else []
+        ),
     output:
         trips=f"data/processed/{NAME}_trips.parquet",
         day_plans=f"data/processed/{NAME}_day_plans.parquet",
@@ -159,11 +166,36 @@ rule simulate:
 rule assign_network:
     input:
         trips=f"data/processed/{NAME}_trips.parquet",
-        network_car=f"data/processed/{NAME}_network_car.graphml",
-        network_bike=f"data/processed/{NAME}_network_bike.graphml",
+        networks=expand(
+            "data/processed/{NAME}_network_{mode}.graphml", NAME=NAME, mode=MODES
+        ),
         grid=f"data/processed/{NAME}_grid_clean.parquet",
+        transit_stops=(
+            [f"data/processed/{NAME}_transit_stops.graphml"] if TRANSIT else []
+        ),
     output:
         f"data/processed/{NAME}_assigned_trips.parquet",
     shell:
         "uv run python workflow/scripts/assign_network.py"
+        " --config workflow/config.yaml"
+
+
+rule download_transit:
+    input:
+        boundaries=f"data/raw/{NAME}_gemeenten.geojson",
+    output:
+        f"data/processed/{NAME}_transit_stops.graphml",
+    shell:
+        "uv run python workflow/scripts/download_transit.py"
+        " --config workflow/config.yaml"
+
+
+rule build_transit_skim:
+    input:
+        transit_stops=f"data/processed/{NAME}_transit_stops.graphml",
+        grid=f"data/processed/{NAME}_grid_clean.parquet",
+    output:
+        f"data/processed/{NAME}_skim_transit.omx",
+    shell:
+        "uv run python workflow/scripts/build_transit_skim.py"
         " --config workflow/config.yaml"

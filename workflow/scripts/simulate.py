@@ -282,9 +282,17 @@ def simulate(cfg: dict) -> None:
     sample = pd.read_parquet(f"data/processed/{name}_sample.parquet")
     all_pois = load_pois(f"data/processed/{name}_pois.parquet")
     zone_specs = pd.read_parquet(f"data/processed/{name}_zone_specs.parquet")
-    skim_car = load_skim(f"data/processed/{name}_skim_car.omx", "car")
-    skim_bike = load_skim(f"data/processed/{name}_skim_bike.omx", "bike")
-    skims = [skim_car, skim_bike]
+
+    skims: list[Skim] = [
+        load_skim(f"data/processed/{name}_skim_{mode}.omx", mode)
+        for mode in cfg["network"]["modes"]
+    ]
+
+    transit_cfg = cfg.get("transit", {})
+    if transit_cfg.get("enabled", False):
+        transit_path = f"data/processed/{name}_skim_transit.omx"
+        if Path(transit_path).exists():
+            skims.append(load_skim(transit_path, "transit"))
 
     all_zones = _zones_from_specs(zone_specs)
     log.info("Loaded %d zones, %d POIs", len(all_zones), len(all_pois))
