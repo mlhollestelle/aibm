@@ -5,6 +5,7 @@ from __future__ import annotations
 import collections
 import json
 import re
+import threading
 import time
 from typing import Any, Protocol
 
@@ -81,6 +82,7 @@ class RateLimiter:
         self._max_calls = max_calls
         self._window = window
         self._timestamps: collections.deque[float] = collections.deque()
+        self._lock = threading.Lock()
 
     def generate_json(
         self,
@@ -89,20 +91,21 @@ class RateLimiter:
         schema: dict[str, Any],
     ) -> str:
         """Throttle then delegate to the wrapped client."""
-        now = time.monotonic()
-
-        # Drop timestamps outside the window
-        while self._timestamps and now - self._timestamps[0] >= self._window:
-            self._timestamps.popleft()
-
-        # If at the limit, sleep until the oldest call expires
-        if len(self._timestamps) >= self._max_calls:
-            sleep_for = self._window - (now - self._timestamps[0])
+        while True:
+            with self._lock:
+                now = time.monotonic()
+                while self._timestamps and now - self._timestamps[0] >= self._window:
+                    self._timestamps.popleft()
+                if len(self._timestamps) < self._max_calls:
+                    self._timestamps.append(now)
+                    break
+                # At the limit: evict the oldest slot and compute how long
+                # to wait.  Sleep happens outside the lock so other threads
+                # are not blocked while this one waits.
+                sleep_for = self._window - (now - self._timestamps.popleft())
             if sleep_for > 0:
                 time.sleep(sleep_for)
-            self._timestamps.popleft()
-
-        self._timestamps.append(time.monotonic())
+            # Loop back to re-check and claim a slot.
         return self._client.generate_json(model=model, prompt=prompt, schema=schema)
 
 

@@ -44,6 +44,7 @@ simulation:
   model: "gpt-4o-mini"
   rate_limit_rpm: 500
   n_zone_candidates: 12
+  max_workers: 4
 
 transit:
   # Set enabled: false to exclude transit from the simulation entirely.
