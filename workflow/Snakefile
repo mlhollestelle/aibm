@@ -193,6 +193,7 @@ rule download_transit:
 rule build_transit_skim:
     input:
         transit_stops=f"data/processed/{NAME}_transit_stops.graphml",
+        walk_network=f"data/processed/{NAME}_network_walk.graphml",
         grid=f"data/processed/{NAME}_grid_clean.parquet",
     output:
         f"data/processed/{NAME}_skim_transit.omx",

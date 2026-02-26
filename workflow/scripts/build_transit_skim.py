@@ -1,8 +1,9 @@
 """Build a zone-level transit travel-time skim matrix.
 
-Combines walk access to the nearest stop, a configurable average wait time,
-shortest stop-to-stop path travel time, and walk egress from the destination
-stop to produce zone-to-zone transit travel times.
+Uses the pedestrian network for walk access and egress to the nearest
+transit stop, combined with shortest stop-to-stop transit times.
+
+Total time = walk_to_stop + avg_wait + transit_stop_to_stop + walk_from_stop
 
 Usage:
     uv run python workflow/scripts/build_transit_skim.py
@@ -21,105 +22,130 @@ sys.path.insert(0, str(Path(__file__).parent))
 import networkx as nx
 import numpy as np
 import openmatrix as omx
+import osmnx as ox
 import pandas as pd
 import tables
 from _config import load_config
+from pyproj import Transformer
 
 _ZONE_RE = re.compile(r"E(\d+)N(\d+)")
 
 
-def _zone_centroid_wgs84(zone_id: str) -> tuple[float, float]:
-    """Convert E{X}N{Y} zone id to approximate WGS84 lat/lon.
-
-    Uses a linear approximation centred on the Zeeland/Walcheren area.
-    Accurate to ~100 m within the study area, which is sufficient for
-    snapping zones to stops.
-    """
-    m = _ZONE_RE.match(zone_id)
-    if m is None:
-        raise ValueError(f"Cannot parse zone_id: {zone_id}")
-    e = int(m.group(1)) * 100 + 50
-    n = int(m.group(2)) * 100 + 50
-    lat = 51.5 + (n - 392000) / 111320
-    lon = 3.7 + (e - 21000) / (111320 * math.cos(math.radians(51.5)))
-    return lat, lon
-
-
-def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Great-circle distance in metres between two WGS84 points."""
-    r = 6_371_000.0
-    d_lat = math.radians(lat2 - lat1)
-    d_lon = math.radians(lon2 - lon1)
-    a = (
-        math.sin(d_lat / 2) ** 2
-        + math.cos(math.radians(lat1))
-        * math.cos(math.radians(lat2))
-        * math.sin(d_lon / 2) ** 2
-    )
-    return r * 2 * math.asin(math.sqrt(a))
-
-
-def _snap_zones_to_stops(
+def _centroids_from_zone_ids(
     zone_ids: list[str],
-    stops: dict[str, tuple[float, float]],
-    max_walk_m: float,
-) -> dict[str, str | None]:
-    """Return {zone_id: nearest_stop_node_id or None}.
+) -> tuple[np.ndarray, np.ndarray]:
+    """Derive cell-centre coordinates (EPSG:28992) from CBS zone_id strings."""
+    eastings = np.empty(len(zone_ids))
+    northings = np.empty(len(zone_ids))
+    for i, zid in enumerate(zone_ids):
+        m = _ZONE_RE.match(zid)
+        if m is None:
+            raise ValueError(f"Cannot parse zone_id: {zid}")
+        eastings[i] = int(m.group(1)) * 100 + 50
+        northings[i] = int(m.group(2)) * 100 + 50
+    return eastings, northings
 
-    Only snaps to stops within *max_walk_m* metres.  ``stops`` maps node
-    id strings (as in the GraphML) to (lat, lon) tuples.
+
+def _add_travel_time_walk(graph: nx.MultiDiGraph, walk_speed: float) -> None:
+    """Add ``travel_time_min`` edge attribute based on constant walk speed."""
+    for _, _, data in graph.edges(data=True):
+        length_km = data["length"] / 1000.0
+        data["travel_time_min"] = (length_km / walk_speed) * 60.0
+
+
+def _snap_stops_to_walk_graph(
+    stops: dict[str, tuple[float, float]],
+    walk_graph: nx.MultiDiGraph,
+    active_stop_ids: set[str],
+) -> dict[int, list[str]]:
+    """Snap transit stop WGS84 coordinates to walk network nodes.
+
+    Only snaps stops that are active (have at least one edge in the transit
+    graph), so that zones are never routed to an isolated stop node.
+
+    Returns a mapping walk_node_id -> list of stop_ids that snap to it.
     """
-    zone_to_stop: dict[str, str | None] = {}
-    stop_items = list(stops.items())
+    transformer = Transformer.from_crs("EPSG:4326", "EPSG:28992", always_xy=True)
+    stop_ids = [s for s in stops if s in active_stop_ids]
+    if not stop_ids:
+        return {}
+    stop_lats = np.array([stops[s][0] for s in stop_ids])
+    stop_lons = np.array([stops[s][1] for s in stop_ids])
+    eastings, northings = transformer.transform(stop_lons, stop_lats)
+    walk_nodes = ox.nearest_nodes(walk_graph, eastings, northings)
 
-    for zid in zone_ids:
-        zlat, zlon = _zone_centroid_wgs84(zid)
-        best_id: str | None = None
-        best_dist = float("inf")
-        for stop_id, (slat, slon) in stop_items:
-            dist = _haversine_m(zlat, zlon, slat, slon)
-            if dist < best_dist:
-                best_dist = dist
-                best_id = stop_id
-        zone_to_stop[zid] = best_id if best_dist <= max_walk_m else None
-
-    return zone_to_stop
+    walknode_to_stops: dict[int, list[str]] = {}
+    for stop_id, wnode in zip(stop_ids, walk_nodes):
+        walknode_to_stops.setdefault(int(wnode), []).append(stop_id)
+    return walknode_to_stops
 
 
-def _walk_time_min(
-    zone_id: str,
-    stop_id: str,
-    stops: dict[str, tuple[float, float]],
-    walk_speed_kmh: float,
-) -> float:
-    """Walk time in minutes from zone centroid to stop."""
-    zlat, zlon = _zone_centroid_wgs84(zone_id)
-    slat, slon = stops[stop_id]
-    dist_m = _haversine_m(zlat, zlon, slat, slon)
-    return (dist_m / 1000.0 / walk_speed_kmh) * 60.0
+def _compute_zone_access(
+    unique_zone_nodes: list[int],
+    node_to_zones: dict[int, list[int]],
+    walk_graph: nx.MultiDiGraph,
+    walknode_to_stops: dict[int, list[str]],
+    n_zones: int,
+) -> list[tuple[str, float] | None]:
+    """Return per-zone (nearest_stop_id, walk_time_min) via the walk network.
+
+    Runs Dijkstra from each unique zone walk node and picks the transit
+    stop walk-node with the lowest travel time.
+    """
+    stop_node_set = set(walknode_to_stops.keys())
+    zone_access: list[tuple[str, float] | None] = [None] * n_zones
+
+    for count, origin_node in enumerate(unique_zone_nodes, 1):
+        if count % 100 == 0 or count == len(unique_zone_nodes):
+            print(f"  Dijkstra {count}/{len(unique_zone_nodes)}", flush=True)
+
+        costs = nx.single_source_dijkstra_path_length(
+            walk_graph, origin_node, weight="travel_time_min"
+        )
+
+        best_stop: str | None = None
+        best_tt = math.inf
+        for wnode, tt in costs.items():
+            if wnode in stop_node_set and tt < best_tt:
+                best_tt = tt
+                best_stop = walknode_to_stops[wnode][0]
+
+        access = (best_stop, best_tt) if best_stop is not None else None
+        for zi in node_to_zones[origin_node]:
+            zone_access[zi] = access
+
+    return zone_access
 
 
 def build_transit_skim(cfg: dict) -> Path:
-    """Compute zone-level transit skim and write OMX file."""
+    """Compute zone-level transit skim using the walk network and write OMX."""
     name = cfg["study_area"]["name"]
     transit_cfg = cfg.get("transit", {})
     walk_speed = float(transit_cfg.get("walk_speed_kmh", 5.0))
-    max_walk_m = float(transit_cfg.get("max_walk_to_stop_m", 800))
     avg_wait_min = float(transit_cfg.get("avg_wait_min", 10.0))
     unreachable = float(cfg["network"]["unreachable"])
 
+    # Load and prepare walk network.
+    walk_path = Path(f"data/processed/{name}_network_walk.graphml")
+    walk_graph = ox.load_graphml(walk_path)
+    _add_travel_time_walk(walk_graph, walk_speed)
+    walk_graph = ox.project_graph(walk_graph, to_crs="EPSG:28992")
+
+    # Load zones.
+    grid = pd.read_parquet(f"data/processed/{name}_grid_clean.parquet")
+    zone_ids: list[str] = sorted(grid["zone_id"].tolist())
+    n_zones = len(zone_ids)
+
+    # Load transit stop graph.
     stop_graph_path = Path(f"data/processed/{name}_transit_stops.graphml")
-    graph: nx.DiGraph = nx.read_graphml(str(stop_graph_path))
+    stop_graph: nx.DiGraph = nx.read_graphml(str(stop_graph_path))
 
     stops: dict[str, tuple[float, float]] = {}
-    for nid, data in graph.nodes(data=True):
+    for nid, data in stop_graph.nodes(data=True):
         lat = float(data.get("lat", data.get("y", 0)))
         lon = float(data.get("lon", data.get("x", 0)))
         stops[str(nid)] = (lat, lon)
 
-    grid = pd.read_parquet(f"data/processed/{name}_grid_clean.parquet")
-    zone_ids: list[str] = sorted(grid["zone_id"].tolist())
-    n_zones = len(zone_ids)
     print(f"Loaded {n_zones} zones, {len(stops)} transit stops")
 
     if not stops:
@@ -131,40 +157,66 @@ def build_transit_skim(cfg: dict) -> Path:
         _write_omx(output, matrix, zone_ids)
         return output
 
-    zone_to_stop = _snap_zones_to_stops(zone_ids, stops, max_walk_m)
-    n_snapped = sum(1 for v in zone_to_stop.values() if v is not None)
-    print(f"Snapped {n_snapped}/{n_zones} zones to transit stops")
+    # Snap zone centroids to walk network nodes.
+    eastings, northings = _centroids_from_zone_ids(zone_ids)
+    zone_walk_nodes = ox.nearest_nodes(walk_graph, eastings, northings)
 
+    node_to_zones: dict[int, list[int]] = {}
+    for i, node in enumerate(zone_walk_nodes):
+        node_to_zones.setdefault(int(node), []).append(i)
+
+    # Only snap stops that participate in at least one route (have edges).
+    active_stop_ids = {str(u) for u, v in stop_graph.edges()} | {
+        str(v) for u, v in stop_graph.edges()
+    }
+    print(f"  {len(active_stop_ids)} active stops (part of a route)")
+
+    # Snap transit stops to walk network nodes.
+    walknode_to_stops = _snap_stops_to_walk_graph(stops, walk_graph, active_stop_ids)
+
+    # For each zone, find nearest transit stop via the walk network.
+    unique_zone_nodes = list(node_to_zones.keys())
+    print(f"Computing walk access for {len(unique_zone_nodes)} unique zone nodes …")
+    zone_access = _compute_zone_access(
+        unique_zone_nodes, node_to_zones, walk_graph, walknode_to_stops, n_zones
+    )
+
+    n_access = sum(1 for a in zone_access if a is not None)
+    print(f"  {n_access}/{n_zones} zones can reach a transit stop on foot")
+
+    # Pre-compute all-pairs shortest paths on the stop graph.
+    print("Computing stop-to-stop transit times …")
+    stop_lengths: dict[str, dict[str, float]] = {}
+    for source in stop_graph.nodes():
+        stop_lengths[str(source)] = {
+            str(k): v
+            for k, v in nx.single_source_dijkstra_path_length(
+                stop_graph, source, weight="travel_time_min"
+            ).items()
+        }
+
+    # Assemble zone-to-zone transit matrix.
     matrix = np.full((n_zones, n_zones), unreachable, dtype=np.float64)
     np.fill_diagonal(matrix, 0.0)
 
-    # Pre-compute all-pairs shortest paths through the stop graph.
-    lengths: dict[str, dict[str, float]] = {}
-    for source in stops:
-        lengths[source] = nx.single_source_dijkstra_path_length(
-            graph, source, weight="travel_time_min"
-        )
-
-    zone_index = {zid: i for i, zid in enumerate(zone_ids)}
-
-    for oi, o_zone in enumerate(zone_ids):
-        o_stop = zone_to_stop.get(o_zone)
-        if o_stop is None:
+    for oi in range(n_zones):
+        o_access = zone_access[oi]
+        if o_access is None:
             continue
-        walk_o = _walk_time_min(o_zone, o_stop, stops, walk_speed)
+        o_stop, o_walk = o_access
+        o_paths = stop_lengths.get(o_stop, {})
 
-        for d_zone in zone_ids:
-            di = zone_index[d_zone]
+        for di in range(n_zones):
             if oi == di:
                 continue
-            d_stop = zone_to_stop.get(d_zone)
-            if d_stop is None:
+            d_access = zone_access[di]
+            if d_access is None:
                 continue
-            if d_stop not in lengths.get(o_stop, {}):
+            d_stop, d_walk = d_access
+            tt_transit = o_paths.get(d_stop)
+            if tt_transit is None:
                 continue
-            stop_tt = lengths[o_stop][d_stop]
-            walk_d = _walk_time_min(d_zone, d_stop, stops, walk_speed)
-            matrix[oi, di] = walk_o + avg_wait_min + stop_tt + walk_d
+            matrix[oi, di] = o_walk + avg_wait_min + tt_transit + d_walk
 
     output = Path(f"data/processed/{name}_skim_transit.omx")
     output.parent.mkdir(parents=True, exist_ok=True)
