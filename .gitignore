@@ -15,9 +15,6 @@ build/
 venv/
 env/
 
-# uv
-uv.lock
-
 # Type checking
 .mypy_cache/
 .ruff_cache/
@@ -34,6 +31,7 @@ htmlcov/
 
 # IDEs
 .idea/
+.vscode/
 *.swp
 *.swo
 
@@ -43,6 +41,12 @@ Thumbs.db
 
 # Webapp generated data
 webapp/static/data/
+
+# Snakemake
+.snakemake/
+
+# LLM response cache
+cache/
 
 # Data (opt-in what you want to track)
 data/raw/*

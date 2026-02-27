@@ -38,6 +38,9 @@ aibm/
 │   │   ├── day_plan.py        # Full-day activity schedule for an agent
 │   │   ├── synthesis.py       # Population synthesis (create agents from specs)
 │   │   ├── llm.py             # LLM client wrappers (Anthropic, Gemini, OpenAI)
+│   │   ├── poi.py             # Points of Interest class and loaders
+│   │   ├── sampling.py        # Destination sampling utilities
+│   │   ├── skim.py            # Travel-time matrix wrapper
 │   │   └── __init__.py        # Public API exports
 │   └── synth_pop/             # Synthetic population helpers (WIP)
 ├── workflow/                  # Snakemake pipeline for the Walcheren example model
@@ -53,6 +56,8 @@ aibm/
 │       ├── synthesize.py           # Run population synthesis
 │       ├── sample_households.py    # Sample households for simulation
 │       ├── build_skim.py           # Compute travel time skim matrix
+│       ├── download_transit.py     # Download transit routes via Overpass API
+│       ├── build_transit_skim.py   # Build transit travel-time skim matrix
 │       ├── export_network.py       # Export network as GeoParquet
 │       ├── fetch_pois.py           # Fetch POIs from OSM
 │       ├── simulate.py             # Run LLM-based day-plan simulation
