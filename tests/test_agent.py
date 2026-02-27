@@ -895,3 +895,56 @@ def test_build_tours_tour_is_closed() -> None:
     )
     result = agent.build_tours(plan)
     assert all(t.is_closed for t in result.tours)
+
+
+def test_schedule_activities_travel_times_in_prompt() -> None:
+    """Travel times appear in the prompt when skims and locations are set."""
+    agent = Agent(name="Alice", age=30, employment="employed")
+    activities = [
+        Activity(type="work", is_flexible=False, location="zone_a"),
+        Activity(type="shopping", is_flexible=True, location="zone_b"),
+    ]
+    mock = _mock_schedule_client(
+        [
+            {"type": "work", "start_time": 480, "end_time": 1020},
+            {"type": "shopping", "start_time": 1040, "end_time": 1100},
+        ]
+    )
+    skims = _make_skims()  # car 12 min zone_a → zone_b
+    agent.schedule_activities(activities, client=mock, skims=skims)
+    prompt = mock.generate_json.call_args.kwargs["prompt"]
+    assert "Travel times between consecutive activities" in prompt
+    assert "work → shopping" in prompt
+    assert "car 12 min" in prompt
+
+
+def test_schedule_activities_min_durations_in_prompt() -> None:
+    """Minimum duration hints appear in the prompt."""
+    agent = Agent(name="Bob", age=35, employment="employed")
+    activities = [
+        Activity(type="work", is_flexible=False, location="zone_a"),
+        Activity(type="shopping", is_flexible=True, location="zone_b"),
+    ]
+    mock = _mock_schedule_client(
+        [
+            {"type": "work", "start_time": 480, "end_time": 1020},
+            {"type": "shopping", "start_time": 1040, "end_time": 1100},
+        ]
+    )
+    agent.schedule_activities(activities, client=mock)
+    prompt = mock.generate_json.call_args.kwargs["prompt"]
+    assert "Suggested minimum durations" in prompt
+    assert "work" in prompt
+    assert "shopping" in prompt
+
+
+def test_schedule_activities_no_travel_times_without_skims() -> None:
+    """Without skims the travel-time block is omitted from the prompt."""
+    agent = Agent(name="Carol", age=25, employment="student")
+    activities = [Activity(type="school", is_flexible=False, location="zone_a")]
+    mock = _mock_schedule_client(
+        [{"type": "school", "start_time": 480, "end_time": 900}]
+    )
+    agent.schedule_activities(activities, client=mock)  # no skims kwarg
+    prompt = mock.generate_json.call_args.kwargs["prompt"]
+    assert "Travel times between consecutive activities" not in prompt

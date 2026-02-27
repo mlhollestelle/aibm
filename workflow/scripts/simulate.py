@@ -221,7 +221,7 @@ def _simulate_agent(
     if not routable:
         return [], day_plan_row, []
 
-    day_plan: DayPlan = agent.schedule_activities(routable, client)  # type: ignore[arg-type]
+    day_plan: DayPlan = agent.schedule_activities(routable, client, skims=skims)  # type: ignore[arg-type]
     agent.build_tours(day_plan)
 
     day_plan_row["n_tours"] = len(day_plan.tours)
