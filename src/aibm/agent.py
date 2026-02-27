@@ -712,6 +712,214 @@ class Agent:
         )
         return DayPlan(activities=sorted_activities)
 
+    def plan_discretionary_activities(
+        self,
+        mandatory: list[Activity],
+        discretionary: list[Activity],
+        pois_by_type: dict[str, list[POI]],
+        skims: list[Skim],
+        client: LLMClient | None = None,
+        n_candidates: int = 10,
+        rng: random.Random | None = None,
+    ) -> list[Activity]:
+        """Plan destination and time for discretionary activities together.
+
+        Presents mandatory anchor activities (with fixed times and
+        locations) alongside candidate POIs for each discretionary
+        activity, letting the LLM reason about where *and* when
+        simultaneously in a single call.
+
+        Args:
+            mandatory: Already-scheduled activities (times + locations
+                set).
+            discretionary: Activities needing location AND time.
+            pois_by_type: Mapping of activity type to available POIs.
+            skims: Skim matrices for travel-time lookups.
+            client: An :class:`~aibm.llm.LLMClient`. When *None* one
+                is created automatically based on ``self.model``.
+            n_candidates: Max POI candidates to show per activity.
+            rng: Optional seeded RNG for reproducible sampling.
+
+        Returns:
+            The same ``discretionary`` list, mutated so each Activity
+            has ``location``, ``poi_id`` (if a POI), ``start_time``,
+            and ``end_time`` set.
+        """
+        if not discretionary:
+            return discretionary
+
+        if client is None:
+            client = create_client(self.model)
+
+        def _fmt(mins: float) -> str:
+            h = int(mins) // 60
+            m = int(mins) % 60
+            return f"{h:02d}:{m:02d}"
+
+        background = self._build_background()
+
+        # --- Fixed activities block ---
+        fixed_lines: list[str] = []
+        for act in mandatory:
+            if act.start_time is None or act.end_time is None or act.location is None:
+                continue
+            time_str = f"{_fmt(act.start_time)}–{_fmt(act.end_time)}"
+            tt_parts: list[str] = []
+            if self.home_zone:
+                for sk in skims:
+                    tt = sk.travel_time(self.home_zone, act.location)
+                    if tt < math.inf:
+                        tt_parts.append(f"{sk.mode} {tt:.0f} min")
+            tt_str = ""
+            if tt_parts:
+                tt_str = " | from home: " + ", ".join(tt_parts)
+            fixed_lines.append(f"- {act.type}: {time_str}, {act.location}{tt_str}")
+        fixed_block = ""
+        if fixed_lines:
+            fixed_block = "\nFixed activities today:\n" + "\n".join(fixed_lines) + "\n"
+
+        # --- Sample candidates per type ---
+        sampled: dict[str, list[POI]] = {
+            act_type: sample_destinations(pois, n=n_candidates, rng=rng)
+            for act_type, pois in pois_by_type.items()
+        }
+
+        # Anchor zones for travel times: home + each mandatory location
+        anchor_zones: list[tuple[str, str]] = []
+        if self.home_zone:
+            anchor_zones.append(("home", self.home_zone))
+        for act in mandatory:
+            if act.location is not None:
+                anchor_zones.append((act.type, act.location))
+
+        # --- Discretionary activities block ---
+        disc_lines: list[str] = []
+        for act in discretionary:
+            disc_lines.append(f"\nActivity type: {act.type}")
+            act_pois = sampled.get(act.type, [])
+            if act_pois:
+                disc_lines.append("  Candidates:")
+                for poi in act_pois:
+                    label = poi.name if poi.name else "unnamed"
+                    anchor_parts: list[str] = []
+                    if poi.zone_id:
+                        for anchor_label, anchor_zone in anchor_zones:
+                            poi_tt_parts: list[str] = []
+                            for sk in skims:
+                                tt = sk.travel_time(anchor_zone, poi.zone_id)
+                                if tt < math.inf:
+                                    poi_tt_parts.append(f"{sk.mode} {tt:.0f} min")
+                            if poi_tt_parts:
+                                anchor_parts.append(
+                                    f"from {anchor_label}: " + ", ".join(poi_tt_parts)
+                                )
+                    line = f"  - poi:{poi.id}: {label}"
+                    if anchor_parts:
+                        line += " | " + " | ".join(anchor_parts)
+                    disc_lines.append(line)
+            else:
+                disc_lines.append("  (no candidates available)")
+        disc_block = "\n".join(disc_lines)
+
+        # --- Duration hints ---
+        seen_types = {a.type for a in discretionary}
+        dur_lines = [
+            f"- {t}: {hint}"
+            for t, hint in _ACTIVITY_MIN_DURATIONS.items()
+            if t in seen_types
+        ]
+        duration_text = ""
+        if dur_lines:
+            duration_text = (
+                "\nSuggested minimum durations:\n" + "\n".join(dur_lines) + "\n"
+            )
+
+        prompt = (
+            f"You are {self.name}, planning your discretionary "
+            "activities for today.\n"
+            f"Background:\n{background}\n"
+            f"{fixed_block}"
+            f"\nDiscretionary activities to plan:{disc_block}\n"
+            f"{duration_text}\n"
+            "For each activity choose a destination and assign "
+            "start_time and end_time (minutes from midnight, "
+            "e.g. 480 = 08:00). The schedule must be feasible: "
+            "allow travel time between activities. "
+            "Return one entry per activity in chronological order."
+        )
+
+        text = client.generate_json(
+            model=self.model,
+            prompt=prompt,
+            schema={
+                "type": "object",
+                "properties": {
+                    "planned_activities": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "type": {"type": "string"},
+                                "destination_id": {"type": "string"},
+                                "start_time": {"type": "number"},
+                                "end_time": {"type": "number"},
+                                "reasoning": {"type": "string"},
+                            },
+                            "required": [
+                                "type",
+                                "destination_id",
+                                "start_time",
+                                "end_time",
+                                "reasoning",
+                            ],
+                        },
+                    }
+                },
+                "required": ["planned_activities"],
+            },
+        )
+
+        data = json.loads(text)
+
+        # Build a POI lookup across all sampled types
+        poi_lookup: dict[str, POI] = {
+            p.id: p for pois in sampled.values() for p in pois
+        }
+
+        # Match response entries to discretionary activities by type,
+        # consuming from the front for duplicate types.
+        pending: dict[str, list[Activity]] = {}
+        for act in discretionary:
+            pending.setdefault(act.type, []).append(act)
+        type_cursors: dict[str, int] = {t: 0 for t in pending}
+
+        for item in data["planned_activities"]:
+            act_type: str = item["type"]
+            acts = pending.get(act_type, [])
+            cursor = type_cursors.get(act_type, 0)
+            if cursor >= len(acts):
+                continue
+            act = acts[cursor]
+            type_cursors[act_type] = cursor + 1
+
+            raw_id: str = item["destination_id"]
+            if raw_id.startswith("poi:") or raw_id.startswith("zone:"):
+                chosen_id = raw_id.split(":", 1)[1]
+            else:
+                chosen_id = raw_id
+
+            if chosen_id in poi_lookup:
+                p = poi_lookup[chosen_id]
+                act.poi_id = p.id
+                act.location = p.zone_id if p.zone_id is not None else p.id
+            else:
+                act.location = chosen_id
+
+            act.start_time = item["start_time"]
+            act.end_time = item["end_time"]
+
+        return discretionary
+
     def build_tours(self, day_plan: DayPlan) -> DayPlan:
         """Convert scheduled activities into Trip/Tour objects.
 

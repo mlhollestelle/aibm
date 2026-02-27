@@ -948,3 +948,187 @@ def test_schedule_activities_no_travel_times_without_skims() -> None:
     agent.schedule_activities(activities, client=mock)  # no skims kwarg
     prompt = mock.generate_json.call_args.kwargs["prompt"]
     assert "Travel times between consecutive activities" not in prompt
+
+
+# --- plan discretionary activities ---
+
+
+def _make_3zone_skims() -> list[Skim]:
+    """3-zone car skim: home(0), work(1), shop(2)."""
+    mat = np.array(
+        [
+            [0.0, 15.0, 5.0],
+            [15.0, 0.0, 3.0],
+            [5.0, 3.0, 0.0],
+        ]
+    )
+    zones = ["zone_home", "zone_work", "zone_shop"]
+    return [Skim(mode="car", matrix=mat, zone_ids=zones)]
+
+
+def test_plan_discretionary_activities_sets_fields() -> None:
+    """The method mutates each discretionary Activity with location and times."""
+    agent = Agent(
+        name="Alice",
+        age=30,
+        employment="employed",
+        home_zone="zone_home",
+        work_zone="zone_work",
+    )
+    work = Activity(
+        type="work",
+        is_flexible=False,
+        location="zone_work",
+        start_time=480,
+        end_time=1020,
+    )
+    shopping = Activity(type="shopping", is_flexible=True)
+    poi = POI(
+        id="p1",
+        name="Albert Heijn",
+        x=0.0,
+        y=0.0,
+        activity_type="shopping",
+        zone_id="zone_shop",
+    )
+    mock = MagicMock()
+    mock.generate_json.return_value = json.dumps(
+        {
+            "planned_activities": [
+                {
+                    "type": "shopping",
+                    "destination_id": "poi:p1",
+                    "start_time": 1050,
+                    "end_time": 1110,
+                    "reasoning": "Convenient after work.",
+                }
+            ]
+        }
+    )
+    result = agent.plan_discretionary_activities(
+        mandatory=[work],
+        discretionary=[shopping],
+        pois_by_type={"shopping": [poi]},
+        skims=_make_3zone_skims(),
+        client=mock,
+    )
+    assert len(result) == 1
+    act = result[0]
+    assert act.poi_id == "p1"
+    assert act.location == "zone_shop"
+    assert act.start_time == 1050
+    assert act.end_time == 1110
+
+
+def test_plan_discretionary_activities_prompt_content() -> None:
+    """Prompt contains mandatory activity times and POI name."""
+    agent = Agent(
+        name="Bob",
+        age=35,
+        employment="employed",
+        home_zone="zone_home",
+        work_zone="zone_work",
+    )
+    work = Activity(
+        type="work",
+        is_flexible=False,
+        location="zone_work",
+        start_time=480,
+        end_time=1050,
+    )
+    shopping = Activity(type="shopping", is_flexible=True)
+    poi = POI(
+        id="p1",
+        name="Albert Heijn",
+        x=0.0,
+        y=0.0,
+        activity_type="shopping",
+        zone_id="zone_shop",
+    )
+    mock = MagicMock()
+    mock.generate_json.return_value = json.dumps(
+        {
+            "planned_activities": [
+                {
+                    "type": "shopping",
+                    "destination_id": "poi:p1",
+                    "start_time": 1080,
+                    "end_time": 1140,
+                    "reasoning": "Close to work.",
+                }
+            ]
+        }
+    )
+    agent.plan_discretionary_activities(
+        mandatory=[work],
+        discretionary=[shopping],
+        pois_by_type={"shopping": [poi]},
+        skims=_make_3zone_skims(),
+        client=mock,
+    )
+    prompt = mock.generate_json.call_args.kwargs["prompt"]
+    # Mandatory work times appear formatted as HH:MM
+    assert "08:00" in prompt
+    assert "17:30" in prompt
+    # POI name appears
+    assert "Albert Heijn" in prompt
+    # Travel times from both home and work appear
+    assert "from home" in prompt
+    assert "from work" in prompt
+
+
+def test_plan_discretionary_activities_empty_returns_unchanged() -> None:
+    """An empty discretionary list is returned without calling the LLM."""
+    agent = Agent(name="Carol", age=25, employment="student")
+    mock = MagicMock()
+    result = agent.plan_discretionary_activities(
+        mandatory=[],
+        discretionary=[],
+        pois_by_type={},
+        skims=[],
+        client=mock,
+    )
+    assert result == []
+    mock.generate_json.assert_not_called()
+
+
+def test_plan_discretionary_activities_bare_zone_id() -> None:
+    """A bare zone id (no poi: prefix) is stored as location directly."""
+    agent = Agent(
+        name="Dave",
+        age=40,
+        employment="employed",
+        home_zone="zone_home",
+    )
+    leisure = Activity(type="leisure", is_flexible=True)
+    poi = POI(
+        id="px",
+        name="Park",
+        x=0.0,
+        y=0.0,
+        activity_type="leisure",
+        zone_id="zone_shop",
+    )
+    mock = MagicMock()
+    mock.generate_json.return_value = json.dumps(
+        {
+            "planned_activities": [
+                {
+                    "type": "leisure",
+                    "destination_id": "zone:zone_shop",
+                    "start_time": 900,
+                    "end_time": 1020,
+                    "reasoning": "Nice park.",
+                }
+            ]
+        }
+    )
+    result = agent.plan_discretionary_activities(
+        mandatory=[],
+        discretionary=[leisure],
+        pois_by_type={"leisure": [poi]},
+        skims=_make_3zone_skims(),
+        client=mock,
+    )
+    assert result[0].location == "zone_shop"
+    assert result[0].poi_id is None
