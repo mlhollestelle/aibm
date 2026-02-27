@@ -1,5 +1,6 @@
 """aibm package."""
 
+from aibm.activity import JointActivity
 from aibm.agent import Agent
 from aibm.household import Household
 from aibm.llm import (
@@ -21,6 +22,7 @@ __all__ = [
     "AnthropicClient",
     "GeminiClient",
     "Household",
+    "JointActivity",
     "LLMClient",
     "POI",
     "RateLimiter",

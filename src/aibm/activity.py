@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 VALID_OUT_OF_HOME_TYPES: frozenset[str] = frozenset(
     {
@@ -41,3 +41,21 @@ class Activity:
     start_time: float | None = None
     end_time: float | None = None
     is_flexible: bool = True
+    is_joint: bool = False
+
+
+@dataclass
+class JointActivity:
+    """A shared household activity with multiple participants.
+
+    Attributes:
+        activity: The underlying Activity (location, times, etc.).
+        participant_ids: Agent ids of all household members
+            participating in this joint activity.
+        reasoning: LLM explanation for why this activity was
+            proposed.
+    """
+
+    activity: Activity
+    participant_ids: list[str] = field(default_factory=list)
+    reasoning: str = ""

@@ -1,7 +1,15 @@
+import json
+from unittest.mock import MagicMock
+
 import pytest
 
+from aibm.activity import Activity, JointActivity
 from aibm.agent import Agent
+from aibm.day_plan import DayPlan
 from aibm.household import Household
+from aibm.poi import POI
+from aibm.tour import Tour
+from aibm.trip import Trip
 
 
 def test_household_starts_empty() -> None:
@@ -81,3 +89,542 @@ def test_no_propagation_when_home_zone_is_none() -> None:
     agent = Agent(name="Dave", home_zone="original")
     Household(members=[agent])
     assert agent.home_zone == "original"
+
+
+# --- vehicle allocation ---
+
+
+def _make_tour(origin: str, destination: str) -> Tour:
+    """Create a simple round-trip tour."""
+    return Tour(
+        trips=[
+            Trip(origin=origin, destination=destination),
+            Trip(origin=destination, destination=origin),
+        ],
+        home_zone=origin,
+    )
+
+
+def test_allocate_vehicles_zero_vehicles() -> None:
+    """All members get False when household has no vehicles."""
+    alice = Agent(
+        name="Alice",
+        age=35,
+        has_license=True,
+        employment="employed",
+    )
+    hh = Household(
+        members=[alice],
+        home_zone="z1",
+        num_vehicles=0,
+    )
+    tours = {alice.id: [_make_tour("z1", "z2")]}
+    result = hh.allocate_vehicles(tours, skims=[])
+    assert result[alice.id] == [False]
+
+
+def test_allocate_vehicles_enough() -> None:
+    """All licensed adults get True when enough vehicles."""
+    alice = Agent(
+        name="Alice",
+        age=35,
+        has_license=True,
+        employment="employed",
+    )
+    bob = Agent(
+        name="Bob",
+        age=37,
+        has_license=True,
+        employment="employed",
+    )
+    hh = Household(
+        members=[alice, bob],
+        home_zone="z1",
+        num_vehicles=2,
+    )
+    tours = {
+        alice.id: [_make_tour("z1", "z2")],
+        bob.id: [_make_tour("z1", "z3")],
+    }
+    result = hh.allocate_vehicles(tours, skims=[])
+    assert result[alice.id] == [True]
+    assert result[bob.id] == [True]
+
+
+def test_allocate_vehicles_scarce() -> None:
+    """LLM is called when vehicles are scarce."""
+    alice = Agent(
+        name="Alice",
+        age=35,
+        has_license=True,
+        employment="employed",
+    )
+    bob = Agent(
+        name="Bob",
+        age=37,
+        has_license=True,
+        employment="employed",
+    )
+    hh = Household(
+        members=[alice, bob],
+        home_zone="z1",
+        num_vehicles=1,
+    )
+    tours = {
+        alice.id: [_make_tour("z1", "z2")],
+        bob.id: [_make_tour("z1", "z3")],
+    }
+
+    mock_client = MagicMock()
+    mock_client.generate_json.return_value = json.dumps(
+        {
+            "allocations": [
+                {
+                    "agent_id": alice.id,
+                    "tour_idx": 0,
+                    "has_vehicle": True,
+                    "reasoning": "Alice commutes far.",
+                },
+                {
+                    "agent_id": bob.id,
+                    "tour_idx": 0,
+                    "has_vehicle": False,
+                    "reasoning": "Bob can bike.",
+                },
+            ]
+        }
+    )
+
+    result = hh.allocate_vehicles(
+        tours,
+        skims=[],
+        client=mock_client,
+    )
+    assert result[alice.id] == [True]
+    assert result[bob.id] == [False]
+    mock_client.generate_json.assert_called_once()
+
+
+def test_allocate_vehicles_prompt_content() -> None:
+    """Prompt contains member names and tour info."""
+    alice = Agent(
+        name="Alice",
+        age=35,
+        has_license=True,
+        employment="employed",
+        persona="Drives to work.",
+    )
+    bob = Agent(
+        name="Bob",
+        age=37,
+        has_license=True,
+        employment="employed",
+    )
+    hh = Household(
+        members=[alice, bob],
+        home_zone="z1",
+        num_vehicles=1,
+    )
+    tours = {
+        alice.id: [_make_tour("z1", "z2")],
+        bob.id: [_make_tour("z1", "z3")],
+    }
+
+    mock_client = MagicMock()
+    mock_client.generate_json.return_value = json.dumps(
+        {
+            "allocations": [
+                {
+                    "agent_id": alice.id,
+                    "tour_idx": 0,
+                    "has_vehicle": True,
+                    "reasoning": "ok",
+                },
+                {
+                    "agent_id": bob.id,
+                    "tour_idx": 0,
+                    "has_vehicle": False,
+                    "reasoning": "ok",
+                },
+            ]
+        }
+    )
+
+    hh.allocate_vehicles(
+        tours,
+        skims=[],
+        client=mock_client,
+    )
+
+    prompt = mock_client.generate_json.call_args[1]["prompt"]
+    assert "Alice" in prompt
+    assert "Bob" in prompt
+    assert "1 vehicle" in prompt
+
+
+def test_allocate_vehicles_unlicensed_excluded() -> None:
+    """Unlicensed members never get vehicle access."""
+    alice = Agent(
+        name="Alice",
+        age=35,
+        has_license=True,
+        employment="employed",
+    )
+    teen = Agent(
+        name="Teen",
+        age=16,
+        has_license=False,
+        employment="student",
+    )
+    hh = Household(
+        members=[alice, teen],
+        home_zone="z1",
+        num_vehicles=1,
+    )
+    tours = {
+        alice.id: [_make_tour("z1", "z2")],
+        teen.id: [_make_tour("z1", "z3")],
+    }
+    # Only 1 licensed adult with tours → enough vehicles.
+    result = hh.allocate_vehicles(tours, skims=[])
+    assert result[alice.id] == [True]
+    assert result[teen.id] == [False]
+
+
+# --- escort trips ---
+
+
+def test_members_needing_escort() -> None:
+    """Age filtering returns only children below threshold."""
+    child = Agent(name="Kid", age=8, employment="student")
+    teen = Agent(name="Teen", age=14, employment="student")
+    adult = Agent(name="Dad", age=40, has_license=True)
+    hh = Household(members=[child, teen, adult], home_zone="z1")
+
+    need_escort = hh.members_needing_escort(age_threshold=12)
+    assert child in need_escort
+    assert teen not in need_escort
+    assert adult not in need_escort
+
+
+def test_potential_escorts() -> None:
+    """Only licensed adults are potential escorts."""
+    dad = Agent(
+        name="Dad",
+        age=40,
+        has_license=True,
+        employment="employed",
+    )
+    mom = Agent(
+        name="Mom",
+        age=38,
+        has_license=False,
+        employment="employed",
+    )
+    teen = Agent(
+        name="Teen",
+        age=17,
+        has_license=True,
+        employment="student",
+    )
+    hh = Household(members=[dad, mom, teen], home_zone="z1")
+
+    escorts = hh.potential_escorts
+    assert dad in escorts
+    assert mom not in escorts  # no licence
+    assert teen not in escorts  # under 18
+
+
+def test_plan_escort_trips_dropoff() -> None:
+    """Parent gains a school stop for drop-off."""
+    dad = Agent(
+        name="Dad",
+        age=40,
+        has_license=True,
+        employment="employed",
+        home_zone="z1",
+    )
+    kid = Agent(
+        name="Kid",
+        age=8,
+        employment="student",
+        home_zone="z1",
+    )
+    hh = Household(
+        members=[dad, kid],
+        home_zone="z1",
+        num_vehicles=1,
+    )
+
+    school_act = Activity(
+        type="school",
+        location="z_school",
+        start_time=480,
+        end_time=900,
+        is_flexible=False,
+    )
+
+    work_act = Activity(
+        type="work",
+        location="z_work",
+        start_time=510,
+        end_time=1020,
+        is_flexible=False,
+    )
+    dad_plan = DayPlan(activities=[work_act])
+    dad.build_tours(dad_plan)
+
+    mock_client = MagicMock()
+    mock_client.generate_json.return_value = json.dumps(
+        {
+            "escort_assignments": [
+                {
+                    "child_id": kid.id,
+                    "escort_id": dad.id,
+                    "trip_type": "dropoff",
+                    "reasoning": "Dad drops off en route.",
+                },
+            ]
+        }
+    )
+
+    result = hh.plan_escort_trips(
+        child_activities={kid.id: [school_act]},
+        parent_plans={dad.id: dad_plan},
+        skims=[],
+        client=mock_client,
+    )
+
+    updated_plan = result[dad.id]
+    escort_acts = [a for a in updated_plan.activities if a.type == "escort"]
+    assert len(escort_acts) == 1
+    assert escort_acts[0].location == "z_school"
+
+
+def test_plan_escort_trips_pickup() -> None:
+    """Parent gains a school stop for pick-up."""
+    mom = Agent(
+        name="Mom",
+        age=38,
+        has_license=True,
+        employment="employed",
+        home_zone="z1",
+    )
+    kid = Agent(
+        name="Kid",
+        age=8,
+        employment="student",
+        home_zone="z1",
+    )
+    hh = Household(
+        members=[mom, kid],
+        home_zone="z1",
+        num_vehicles=1,
+    )
+
+    school_act = Activity(
+        type="school",
+        location="z_school",
+        start_time=480,
+        end_time=900,
+        is_flexible=False,
+    )
+    work_act = Activity(
+        type="work",
+        location="z_work",
+        start_time=510,
+        end_time=1020,
+        is_flexible=False,
+    )
+    mom_plan = DayPlan(activities=[work_act])
+    mom.build_tours(mom_plan)
+
+    mock_client = MagicMock()
+    mock_client.generate_json.return_value = json.dumps(
+        {
+            "escort_assignments": [
+                {
+                    "child_id": kid.id,
+                    "escort_id": mom.id,
+                    "trip_type": "pickup",
+                    "reasoning": "Mom picks up after work.",
+                },
+            ]
+        }
+    )
+
+    result = hh.plan_escort_trips(
+        child_activities={kid.id: [school_act]},
+        parent_plans={mom.id: mom_plan},
+        skims=[],
+        client=mock_client,
+    )
+
+    updated_plan = result[mom.id]
+    escort_acts = [a for a in updated_plan.activities if a.type == "escort"]
+    assert len(escort_acts) == 1
+    assert escort_acts[0].location == "z_school"
+
+
+def test_child_trip_mode() -> None:
+    """Child's escort trip should have escort_agent_id set on Trip."""
+    # escort_agent_id is a field on Trip, verified here.
+    trip = Trip(
+        origin="z1",
+        destination="z_school",
+        mode="car_passenger",
+        escort_agent_id="dad-123",
+    )
+    assert trip.escort_agent_id == "dad-123"
+    assert trip.mode == "car_passenger"
+
+
+# --- joint activities ---
+
+
+def test_plan_joint_single_person() -> None:
+    """Single-person household returns empty, no LLM call."""
+    alice = Agent(
+        name="Alice",
+        age=35,
+        has_license=True,
+        employment="employed",
+    )
+    hh = Household(members=[alice], home_zone="z1")
+
+    result = hh.plan_joint_activities(
+        member_schedules={alice.id: []},
+        pois_by_type={},
+        skims=[],
+    )
+    assert result == []
+
+
+def test_plan_joint_activities_result() -> None:
+    """Multi-person household gets JointActivity list from LLM."""
+    alice = Agent(
+        name="Alice",
+        age=35,
+        has_license=True,
+        employment="employed",
+    )
+    bob = Agent(
+        name="Bob",
+        age=37,
+        has_license=True,
+        employment="employed",
+    )
+    hh = Household(
+        members=[alice, bob],
+        home_zone="z1",
+        num_vehicles=1,
+    )
+
+    poi = POI(
+        id="shop1",
+        name="Grocery Store",
+        x=0.0,
+        y=0.0,
+        activity_type="shopping",
+        zone_id="z_shop",
+    )
+
+    mock_client = MagicMock()
+    mock_client.generate_json.return_value = json.dumps(
+        {
+            "joint_activities": [
+                {
+                    "activity_type": "shopping",
+                    "destination_id": "poi:shop1",
+                    "start_time": 1080,
+                    "end_time": 1140,
+                    "participant_ids": [
+                        alice.id,
+                        bob.id,
+                    ],
+                    "reasoning": "Family grocery run.",
+                },
+            ]
+        }
+    )
+
+    result = hh.plan_joint_activities(
+        member_schedules={
+            alice.id: [],
+            bob.id: [],
+        },
+        pois_by_type={"shopping": [poi]},
+        skims=[],
+        client=mock_client,
+    )
+
+    assert len(result) == 1
+    assert isinstance(result[0], JointActivity)
+    assert result[0].activity.type == "shopping"
+    assert result[0].activity.location == "z_shop"
+    assert alice.id in result[0].participant_ids
+    assert bob.id in result[0].participant_ids
+    mock_client.generate_json.assert_called_once()
+
+
+def test_joint_injected_as_fixed() -> None:
+    """Joint activities should have is_flexible=False."""
+    alice = Agent(
+        name="Alice",
+        age=35,
+        has_license=True,
+        employment="employed",
+    )
+    bob = Agent(
+        name="Bob",
+        age=37,
+        has_license=True,
+        employment="employed",
+    )
+    hh = Household(
+        members=[alice, bob],
+        home_zone="z1",
+        num_vehicles=1,
+    )
+
+    poi = POI(
+        id="shop1",
+        name="Grocery Store",
+        x=0.0,
+        y=0.0,
+        activity_type="shopping",
+        zone_id="z_shop",
+    )
+
+    mock_client = MagicMock()
+    mock_client.generate_json.return_value = json.dumps(
+        {
+            "joint_activities": [
+                {
+                    "activity_type": "shopping",
+                    "destination_id": "poi:shop1",
+                    "start_time": 1080,
+                    "end_time": 1140,
+                    "participant_ids": [
+                        alice.id,
+                        bob.id,
+                    ],
+                    "reasoning": "Family grocery run.",
+                },
+            ]
+        }
+    )
+
+    result = hh.plan_joint_activities(
+        member_schedules={
+            alice.id: [],
+            bob.id: [],
+        },
+        pois_by_type={"shopping": [poi]},
+        skims=[],
+        client=mock_client,
+    )
+
+    assert len(result) == 1
+    assert result[0].activity.is_flexible is False
+    assert result[0].activity.is_joint is True
