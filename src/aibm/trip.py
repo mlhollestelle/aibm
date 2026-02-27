@@ -28,3 +28,4 @@ class Trip:
     departure_time: float | None = None
     arrival_time: float | None = None
     distance: float | None = None
+    escort_agent_id: str | None = None
