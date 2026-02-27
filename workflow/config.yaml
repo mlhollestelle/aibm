@@ -39,7 +39,7 @@ synthesis:
   seed: 42
 
 simulation:
-  n_households: 2
+  n_households: 10
   seed: 42
   model: "gpt-4o-mini"
   rate_limit_rpm: 500
