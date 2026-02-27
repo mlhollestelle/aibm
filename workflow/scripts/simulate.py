@@ -189,19 +189,38 @@ def _simulate_agent(
 
     activities: list[Activity] = agent.generate_activities(client)  # type: ignore[arg-type]
 
-    for act in activities:
-        if act.is_flexible and act.location is None:
-            act_pois = filter_pois(all_pois, act.type)
-            if act_pois:
-                agent.choose_destination(
-                    act,
-                    pois=act_pois,
-                    skims=skims,
-                    client=client,  # type: ignore[arg-type]
-                )
+    mandatory = [a for a in activities if not a.is_flexible]
+    discretionary = [a for a in activities if a.is_flexible]
 
-    # Only route activities that have a location assigned.
-    routable = [a for a in activities if a.location is not None]
+    # Schedule mandatory activities (work / school get fixed hours).
+    mandatory_plan = agent.schedule_activities(
+        mandatory,
+        client,
+        skims=skims,  # type: ignore[arg-type]
+    )
+
+    # Build POI candidates per discretionary activity type.
+    pois_by_type: dict[str, list] = {}
+    for act in discretionary:
+        if act.type not in pois_by_type:
+            type_pois = filter_pois(all_pois, act.type)
+            if type_pois:
+                pois_by_type[act.type] = type_pois
+
+    disc_with_pois = [a for a in discretionary if a.type in pois_by_type]
+
+    planned_disc: list[Activity] = []
+    if disc_with_pois:
+        planned_disc = agent.plan_discretionary_activities(  # type: ignore[arg-type]
+            mandatory_plan.activities,
+            disc_with_pois,
+            pois_by_type,
+            skims,
+            client=client,  # type: ignore[arg-type]
+        )
+
+    all_activities = mandatory_plan.activities + planned_disc
+    routable = [a for a in all_activities if a.location is not None]
 
     day_plan_row: dict = {
         "agent_id": agent.id,
@@ -221,7 +240,7 @@ def _simulate_agent(
     if not routable:
         return [], day_plan_row, []
 
-    day_plan: DayPlan = agent.schedule_activities(routable, client, skims=skims)  # type: ignore[arg-type]
+    day_plan = DayPlan(activities=sorted(routable, key=lambda a: a.start_time or 0))
     agent.build_tours(day_plan)
 
     day_plan_row["n_tours"] = len(day_plan.tours)
