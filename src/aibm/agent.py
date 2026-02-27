@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import random
 import uuid
 from dataclasses import dataclass, field
@@ -20,6 +21,16 @@ from aibm.zone import Zone
 
 if TYPE_CHECKING:
     from aibm.household import Household
+
+_ACTIVITY_MIN_DURATIONS: dict[str, str] = {
+    "work": "360–540 min (6–9 h)",
+    "school": "300–420 min (5–7 h)",
+    "shopping": "15–60 min",
+    "leisure": "60–180 min",
+    "personal_business": "15–45 min",
+    "eating_out": "30–90 min",
+    "escort": "10–30 min",
+}
 
 
 @dataclass
@@ -588,6 +599,7 @@ class Agent:
         self,
         activities: list[Activity],
         client: LLMClient | None = None,
+        skims: list[Skim] | None = None,
     ) -> DayPlan:
         """Ask the LLM to assign start/end times to activities.
 
@@ -597,6 +609,8 @@ class Agent:
         Args:
             activities: Activities to schedule.
             client: An :class:`~aibm.llm.LLMClient`.
+            skims: Optional skim matrices used to include leg
+                travel times in the scheduling prompt.
 
         Returns:
             A ``DayPlan`` sorted by ``start_time``.
@@ -612,15 +626,50 @@ class Agent:
             f"- {a.type} (flexible: {'yes' if a.is_flexible else 'no'})"
             for a in activities
         )
+
+        travel_text = ""
+        if skims:
+            legs = []
+            for a, b in zip(activities, activities[1:]):
+                if a.location and b.location:
+                    parts = []
+                    for sk in skims:
+                        tt = sk.travel_time(a.location, b.location)
+                        if tt < math.inf:
+                            parts.append(f"{sk.mode} {tt:.0f} min")
+                    if parts:
+                        legs.append(f"- {a.type} → {b.type}: {', '.join(parts)}")
+            if legs:
+                travel_text = (
+                    "\nTravel times between consecutive activities:\n"
+                    + "\n".join(legs)
+                    + "\n"
+                )
+
+        seen_types = {a.type for a in activities}
+        dur_lines = [
+            f"- {t}: {hint}"
+            for t, hint in _ACTIVITY_MIN_DURATIONS.items()
+            if t in seen_types
+        ]
+        duration_text = ""
+        if dur_lines:
+            duration_text = (
+                "\nSuggested minimum durations:\n" + "\n".join(dur_lines) + "\n"
+            )
+
         prompt = (
             f"You are {self.name}, scheduling your day.\n"
             f"Background:\n{background}\n\n"
-            f"Activities to schedule:\n{activities_text}\n\n"
-            "Assign a start_time and end_time (in minutes "
-            "from midnight, e.g. 480 = 08:00) to each "
-            "activity. Fixed activities have realistic fixed "
-            "hours; flexible ones fill the remaining time. "
-            "Return them in chronological order."
+            f"Activities to schedule:\n{activities_text}\n"
+            f"{travel_text}"
+            f"{duration_text}\n"
+            "Assign a start_time and end_time (in minutes from midnight, "
+            "e.g. 480 = 08:00) to each activity. "
+            "Ensure each activity starts at least as late as the previous "
+            "activity's end_time plus the travel time to reach it. "
+            "Fixed activities have realistic fixed hours; flexible ones fill "
+            "the remaining time. Return them in chronological order."
         )
 
         text = client.generate_json(
