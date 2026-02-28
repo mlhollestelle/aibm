@@ -118,7 +118,7 @@ class Agent:
         client: LLMClient | None = None,
         household: Household | None = None,
         overwrite: bool = False,
-    ) -> str:
+    ) -> tuple[str, str]:
         """Ask the LLM to create a short behavioural persona.
 
         The persona is a 1-2 sentence profile that captures travel
@@ -137,10 +137,11 @@ class Agent:
                 exists.
 
         Returns:
-            The generated persona string.
+            Tuple of (persona string, prompt string). The prompt
+            is empty when the cached value is returned.
         """
         if self.persona is not None and not overwrite:
-            return self.persona
+            return self.persona, ""
 
         if client is None:
             client = create_client(self.model)
@@ -170,14 +171,14 @@ class Agent:
 
         data = json.loads(text)
         self.persona = data["persona"]
-        return self.persona
+        return self.persona, prompt
 
     def choose_mode(
         self,
         options: list[ModeOption],
         client: LLMClient | None = None,
         household: Household | None = None,
-    ) -> ModeChoice:
+    ) -> tuple[ModeChoice, str]:
         """Ask the LLM to pick a travel mode and explain why.
 
         Args:
@@ -188,7 +189,8 @@ class Agent:
                 count and income level for richer decision context.
 
         Returns:
-            A ``ModeChoice`` with the selected option and reasoning.
+            Tuple of (ModeChoice with selected option and reasoning,
+            prompt string).
 
         Raises:
             ValueError: If options is empty.
@@ -231,7 +233,7 @@ class Agent:
         data = json.loads(text)
         chosen_name: str = data["choice"]
         chosen_option = next(opt for opt in options if opt.mode == chosen_name)
-        return ModeChoice(option=chosen_option, reasoning=data["reasoning"])
+        return ModeChoice(option=chosen_option, reasoning=data["reasoning"]), prompt
 
     def choose_work_zone(
         self,
@@ -239,7 +241,7 @@ class Agent:
         travel_times: dict[str, dict[str, float]],
         client: LLMClient | None = None,
         overwrite: bool = False,
-    ) -> str:
+    ) -> tuple[str, str]:
         """Ask the LLM to pick a work zone for this agent.
 
         If a work zone is already set the LLM call is skipped and
@@ -253,7 +255,8 @@ class Agent:
                 already set.
 
         Returns:
-            The chosen zone id (stored as ``self.work_zone``).
+            Tuple of (chosen zone id, prompt string). The prompt
+            is empty when the cached value is returned.
 
         Raises:
             ValueError: If not employed or zones is empty.
@@ -261,7 +264,7 @@ class Agent:
         if self.employment != "employed":
             raise ValueError("choose_work_zone only applies to employed agents")
         if self.work_zone is not None and not overwrite:
-            return self.work_zone
+            return self.work_zone, ""
         return self._choose_long_term_zone(zones, travel_times, "work", client)
 
     def choose_school_zone(
@@ -270,7 +273,7 @@ class Agent:
         travel_times: dict[str, dict[str, float]],
         client: LLMClient | None = None,
         overwrite: bool = False,
-    ) -> str:
+    ) -> tuple[str, str]:
         """Ask the LLM to pick a school zone for this agent.
 
         If a school zone is already set the LLM call is skipped
@@ -285,7 +288,8 @@ class Agent:
                 already set.
 
         Returns:
-            The chosen zone id (stored as ``self.school_zone``).
+            Tuple of (chosen zone id, prompt string). The prompt
+            is empty when the cached value is returned.
 
         Raises:
             ValueError: If not a student or zones is empty.
@@ -293,7 +297,7 @@ class Agent:
         if self.employment != "student":
             raise ValueError("choose_school_zone only applies to student agents")
         if self.school_zone is not None and not overwrite:
-            return self.school_zone
+            return self.school_zone, ""
         return self._choose_long_term_zone(zones, travel_times, "school", client)
 
     def _choose_long_term_zone(
@@ -302,7 +306,7 @@ class Agent:
         travel_times: dict[str, dict[str, float]],
         purpose: str,
         client: LLMClient | None = None,
-    ) -> str:
+    ) -> tuple[str, str]:
         """Shared logic for choosing a work or school zone."""
         if not zones:
             raise ValueError("zones must contain at least one Zone")
@@ -350,12 +354,12 @@ class Agent:
             self.work_zone = chosen_id
         else:
             self.school_zone = chosen_id
-        return chosen_id
+        return chosen_id, prompt
 
     def generate_activities(
         self,
         client: LLMClient | None = None,
-    ) -> list[Activity]:
+    ) -> tuple[list[Activity], str]:
         """Ask the LLM to generate today's activity list.
 
         Mandatory activities (work / school) always appear. The
@@ -366,7 +370,7 @@ class Agent:
             client: An :class:`~aibm.llm.LLMClient`.
 
         Returns:
-            A non-empty list of ``Activity`` objects.
+            Tuple of (list of Activity objects, prompt string).
         """
         if client is None:
             client = create_client(self.model)
@@ -442,7 +446,7 @@ class Agent:
                 activity.is_flexible = False
             activities.append(activity)
 
-        return activities
+        return activities, prompt
 
     def choose_destination(
         self,
@@ -454,7 +458,7 @@ class Agent:
         current_zone: str | None = None,
         n_candidates: int = 10,
         rng: random.Random | None = None,
-    ) -> Activity:
+    ) -> tuple[Activity, str]:
         """Ask the LLM to pick a destination for an activity.
 
         Supply *candidates* (zones), *pois*, or both.  When POIs
@@ -474,7 +478,7 @@ class Agent:
             rng: Optional seeded RNG for reproducible sampling.
 
         Returns:
-            The same ``activity`` with ``location`` set.
+            Tuple of (activity with ``location`` set, prompt string).
 
         Raises:
             ValueError: If both *candidates* and *pois* are
@@ -593,14 +597,14 @@ class Agent:
             activity.location = poi.zone_id if poi.zone_id is not None else poi.id
         else:
             activity.location = chosen_id
-        return activity
+        return activity, prompt
 
     def schedule_activities(
         self,
         activities: list[Activity],
         client: LLMClient | None = None,
         skims: list[Skim] | None = None,
-    ) -> DayPlan:
+    ) -> tuple[DayPlan, str]:
         """Ask the LLM to assign start/end times to activities.
 
         An empty input list returns an empty ``DayPlan`` without
@@ -613,10 +617,11 @@ class Agent:
                 travel times in the scheduling prompt.
 
         Returns:
-            A ``DayPlan`` sorted by ``start_time``.
+            Tuple of (DayPlan sorted by start_time, prompt string).
+            The prompt is empty when the activities list is empty.
         """
         if not activities:
-            return DayPlan(activities=[])
+            return DayPlan(activities=[]), ""
 
         if client is None:
             client = create_client(self.model)
@@ -710,7 +715,7 @@ class Agent:
             activities,
             key=lambda a: a.start_time if a.start_time is not None else 0,
         )
-        return DayPlan(activities=sorted_activities)
+        return DayPlan(activities=sorted_activities), prompt
 
     def plan_discretionary_activities(
         self,
@@ -721,7 +726,7 @@ class Agent:
         client: LLMClient | None = None,
         n_candidates: int = 10,
         rng: random.Random | None = None,
-    ) -> list[Activity]:
+    ) -> tuple[list[Activity], str]:
         """Plan destination and time for discretionary activities together.
 
         Presents mandatory anchor activities (with fixed times and
@@ -741,12 +746,12 @@ class Agent:
             rng: Optional seeded RNG for reproducible sampling.
 
         Returns:
-            The same ``discretionary`` list, mutated so each Activity
-            has ``location``, ``poi_id`` (if a POI), ``start_time``,
-            and ``end_time`` set.
+            Tuple of (discretionary list mutated with location,
+            poi_id, start_time, end_time set; prompt string). The
+            prompt is empty when the discretionary list is empty.
         """
         if not discretionary:
-            return discretionary
+            return discretionary, ""
 
         if client is None:
             client = create_client(self.model)
@@ -918,7 +923,7 @@ class Agent:
             act.start_time = item["start_time"]
             act.end_time = item["end_time"]
 
-        return discretionary
+        return discretionary, prompt
 
     def build_tours(self, day_plan: DayPlan) -> DayPlan:
         """Convert scheduled activities into Trip/Tour objects.
@@ -1003,7 +1008,7 @@ class Agent:
         options: list[ModeOption],
         client: LLMClient | None = None,
         household: Household | None = None,
-    ) -> ModeChoice:
+    ) -> tuple[ModeChoice, str]:
         """Choose one mode for the entire tour.
 
         Calls :meth:`choose_mode` once for the first (outbound) trip
@@ -1016,7 +1021,7 @@ class Agent:
             household: Optional household context.
 
         Returns:
-            The :class:`ModeChoice` for the tour.
+            Tuple of (ModeChoice for the tour, prompt string).
 
         Raises:
             ValueError: If the tour has no trips or options
@@ -1025,7 +1030,7 @@ class Agent:
         if not tour.trips:
             raise ValueError("tour must contain at least one trip")
 
-        choice = self.choose_mode(options, client=client, household=household)
+        choice, prompt = self.choose_mode(options, client=client, household=household)
         for trip in tour.trips:
             trip.mode = choice.option.mode
-        return choice
+        return choice, prompt

@@ -119,8 +119,9 @@ def test_allocate_vehicles_zero_vehicles() -> None:
         num_vehicles=0,
     )
     tours = {alice.id: [_make_tour("z1", "z2")]}
-    result = hh.allocate_vehicles(tours, skims=[])
-    assert result[alice.id] == [False]
+    alloc, prompt = hh.allocate_vehicles(tours, skims=[])
+    assert alloc[alice.id] == [False]
+    assert prompt == ""
 
 
 def test_allocate_vehicles_enough() -> None:
@@ -146,9 +147,10 @@ def test_allocate_vehicles_enough() -> None:
         alice.id: [_make_tour("z1", "z2")],
         bob.id: [_make_tour("z1", "z3")],
     }
-    result = hh.allocate_vehicles(tours, skims=[])
-    assert result[alice.id] == [True]
-    assert result[bob.id] == [True]
+    alloc, prompt = hh.allocate_vehicles(tours, skims=[])
+    assert alloc[alice.id] == [True]
+    assert alloc[bob.id] == [True]
+    assert prompt == ""
 
 
 def test_allocate_vehicles_scarce() -> None:
@@ -195,13 +197,15 @@ def test_allocate_vehicles_scarce() -> None:
         }
     )
 
-    result = hh.allocate_vehicles(
+    alloc, prompt = hh.allocate_vehicles(
         tours,
         skims=[],
         client=mock_client,
     )
-    assert result[alice.id] == [True]
-    assert result[bob.id] == [False]
+    assert alloc[alice.id] == [True]
+    assert alloc[bob.id] == [False]
+    assert isinstance(prompt, str)
+    assert len(prompt) > 0
     mock_client.generate_json.assert_called_once()
 
 
@@ -286,9 +290,9 @@ def test_allocate_vehicles_unlicensed_excluded() -> None:
         teen.id: [_make_tour("z1", "z3")],
     }
     # Only 1 licensed adult with tours → enough vehicles.
-    result = hh.allocate_vehicles(tours, skims=[])
-    assert result[alice.id] == [True]
-    assert result[teen.id] == [False]
+    alloc, _ = hh.allocate_vehicles(tours, skims=[])
+    assert alloc[alice.id] == [True]
+    assert alloc[teen.id] == [False]
 
 
 # --- escort trips ---
@@ -388,7 +392,7 @@ def test_plan_escort_trips_dropoff() -> None:
         }
     )
 
-    result = hh.plan_escort_trips(
+    result, prompt = hh.plan_escort_trips(
         child_activities={kid.id: [school_act]},
         parent_plans={dad.id: dad_plan},
         skims=[],
@@ -399,6 +403,8 @@ def test_plan_escort_trips_dropoff() -> None:
     escort_acts = [a for a in updated_plan.activities if a.type == "escort"]
     assert len(escort_acts) == 1
     assert escort_acts[0].location == "z_school"
+    assert isinstance(prompt, str)
+    assert len(prompt) > 0
 
 
 def test_plan_escort_trips_pickup() -> None:
@@ -453,7 +459,7 @@ def test_plan_escort_trips_pickup() -> None:
         }
     )
 
-    result = hh.plan_escort_trips(
+    result, _ = hh.plan_escort_trips(
         child_activities={kid.id: [school_act]},
         parent_plans={mom.id: mom_plan},
         skims=[],
@@ -492,12 +498,13 @@ def test_plan_joint_single_person() -> None:
     )
     hh = Household(members=[alice], home_zone="z1")
 
-    result = hh.plan_joint_activities(
+    result, prompt = hh.plan_joint_activities(
         member_schedules={alice.id: []},
         pois_by_type={},
         skims=[],
     )
     assert result == []
+    assert prompt == ""
 
 
 def test_plan_joint_activities_result() -> None:
@@ -548,7 +555,7 @@ def test_plan_joint_activities_result() -> None:
         }
     )
 
-    result = hh.plan_joint_activities(
+    result, prompt = hh.plan_joint_activities(
         member_schedules={
             alice.id: [],
             bob.id: [],
@@ -564,6 +571,8 @@ def test_plan_joint_activities_result() -> None:
     assert result[0].activity.location == "z_shop"
     assert alice.id in result[0].participant_ids
     assert bob.id in result[0].participant_ids
+    assert isinstance(prompt, str)
+    assert len(prompt) > 0
     mock_client.generate_json.assert_called_once()
 
 
@@ -615,7 +624,7 @@ def test_joint_injected_as_fixed() -> None:
         }
     )
 
-    result = hh.plan_joint_activities(
+    result, _ = hh.plan_joint_activities(
         member_schedules={
             alice.id: [],
             bob.id: [],

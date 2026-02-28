@@ -79,7 +79,7 @@ class Household:
         skims: list[Skim],
         client: LLMClient | None = None,
         model: str = "gemini-2.5-flash-lite",
-    ) -> dict[str, list[bool]]:
+    ) -> tuple[dict[str, list[bool]], str]:
         """Decide which members get vehicle access per tour.
 
         When the household has fewer vehicles than licensed adults
@@ -96,8 +96,9 @@ class Household:
             model: LLM model name for the allocation call.
 
         Returns:
-            Mapping of agent id to a list of booleans (one per
-            tour) indicating vehicle access.
+            Tuple of (mapping of agent id to list of booleans
+            indicating vehicle access, prompt string). The prompt
+            is empty when no LLM call is needed.
         """
         # Build default all-False result.
         result: dict[str, list[bool]] = {
@@ -105,11 +106,11 @@ class Household:
         }
 
         if not member_tours:
-            return result
+            return result, ""
 
         # Fast path: no vehicles at all.
         if self.num_vehicles == 0:
-            return result
+            return result, ""
 
         # Identify licensed adults with tours.
         member_lookup = {m.id: m for m in self.members}
@@ -124,7 +125,7 @@ class Household:
         if self.num_vehicles >= len(licensed_with_tours):
             for m in licensed_with_tours:
                 result[m.id] = [True] * len(member_tours[m.id])
-            return result
+            return result, ""
 
         # Need LLM to decide allocation.
         if client is None:
@@ -222,7 +223,7 @@ class Household:
             if aid in result and 0 <= tidx < len(result[aid]):
                 result[aid][tidx] = item["has_vehicle"]
 
-        return result
+        return result, prompt
 
     def members_needing_escort(
         self,
@@ -247,7 +248,7 @@ class Household:
         skims: list[Skim],
         client: LLMClient | None = None,
         model: str = "gemini-2.5-flash-lite",
-    ) -> dict[str, DayPlan]:
+    ) -> tuple[dict[str, DayPlan], str]:
         """Assign escort duty and insert stops into parent tours.
 
         For each child needing escort, the LLM decides which
@@ -266,19 +267,21 @@ class Household:
             model: LLM model name for the escort call.
 
         Returns:
-            Updated parent_plans dict with escort stops inserted.
+            Tuple of (updated parent_plans dict with escort stops
+            inserted, prompt string). The prompt is empty when no
+            LLM call is needed.
         """
         if not child_activities:
-            return parent_plans
+            return parent_plans, ""
 
         escorts = self.potential_escorts
         if not escorts:
-            return parent_plans
+            return parent_plans, ""
 
         # Only consider parents who have day plans.
         available_parents = [e for e in escorts if e.id in parent_plans]
         if not available_parents:
-            return parent_plans
+            return parent_plans, ""
 
         if client is None:
             from aibm.llm import create_client
@@ -420,7 +423,7 @@ class Household:
             dp.tours = []
             parent.build_tours(dp)
 
-        return parent_plans
+        return parent_plans, prompt
 
     def plan_joint_activities(
         self,
@@ -431,7 +434,7 @@ class Household:
         model: str = "gemini-2.5-flash-lite",
         n_candidates: int = 10,
         rng: random.Random | None = None,
-    ) -> list[JointActivity]:
+    ) -> tuple[list[JointActivity], str]:
         """Propose 0-2 shared activities for the household.
 
         Single-person households return an empty list without
@@ -448,7 +451,9 @@ class Household:
             rng: Optional seeded RNG for reproducible sampling.
 
         Returns:
-            List of JointActivity objects (0-2 items).
+            Tuple of (list of JointActivity objects (0-2 items),
+            prompt string). The prompt is empty when no LLM call
+            is needed.
         """
         import random as _random
 
@@ -458,7 +463,7 @@ class Household:
 
         # Fast path: single-person household.
         if self.size <= 1:
-            return []
+            return [], ""
 
         if client is None:
             from aibm.llm import create_client
@@ -510,7 +515,7 @@ class Household:
                 poi_lines.append(f"- poi:{p.id}: {label} [{p.activity_type}]")
 
         if not poi_lines:
-            return []
+            return [], ""
 
         prompt = (
             "This household is considering shared activities "
@@ -616,4 +621,4 @@ class Household:
                 )
             )
 
-        return results
+        return results, prompt

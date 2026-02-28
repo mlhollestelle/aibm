@@ -159,28 +159,29 @@ def _build_agent_plan(
     Returns:
         Tuple of (day_plan_or_None, day_plan_row, activity_rows).
     """
-    agent.generate_persona(client, household=hh)  # type: ignore[arg-type]
+    _, prompt_persona = agent.generate_persona(client, household=hh)  # type: ignore[arg-type]
 
+    prompt_zone: str | None = None
     if agent.employment == "employed":
         candidates, travel_times = _nearest_zones(
             agent.home_zone, all_zones, skims, n_zone_candidates
         )
         if candidates:
-            agent.choose_work_zone(candidates, travel_times, client)  # type: ignore[arg-type]
+            _, prompt_zone = agent.choose_work_zone(candidates, travel_times, client)  # type: ignore[arg-type]
 
     if agent.employment == "student":
         candidates, travel_times = _nearest_zones(
             agent.home_zone, all_zones, skims, n_zone_candidates
         )
         if candidates:
-            agent.choose_school_zone(candidates, travel_times, client)  # type: ignore[arg-type]
+            _, prompt_zone = agent.choose_school_zone(candidates, travel_times, client)  # type: ignore[arg-type]
 
-    activities: list[Activity] = agent.generate_activities(client)  # type: ignore[arg-type]
+    activities, prompt_activities = agent.generate_activities(client)  # type: ignore[arg-type]
 
     mandatory = [a for a in activities if not a.is_flexible]
     discretionary = [a for a in activities if a.is_flexible]
 
-    mandatory_plan = agent.schedule_activities(
+    mandatory_plan, prompt_schedule = agent.schedule_activities(
         mandatory,
         client,
         skims=skims,  # type: ignore[arg-type]
@@ -196,8 +197,9 @@ def _build_agent_plan(
     disc_with_pois = [a for a in discretionary if a.type in pois_by_type]
 
     planned_disc: list[Activity] = []
+    prompt_discretionary: str | None = None
     if disc_with_pois:
-        planned_disc = agent.plan_discretionary_activities(  # type: ignore[arg-type]
+        planned_disc, prompt_discretionary = agent.plan_discretionary_activities(  # type: ignore[arg-type]
             mandatory_plan.activities,
             disc_with_pois,
             pois_by_type,
@@ -221,6 +223,14 @@ def _build_agent_plan(
         "persona": agent.persona,
         "n_activities": len(routable),
         "n_tours": 0,
+        "prompt_persona": prompt_persona,
+        "prompt_zone": prompt_zone,
+        "prompt_activities": prompt_activities,
+        "prompt_schedule": prompt_schedule,
+        "prompt_discretionary": prompt_discretionary,
+        "prompt_vehicle_alloc": None,
+        "prompt_escort": None,
+        "prompt_joint": None,
     }
 
     if not routable:
@@ -274,6 +284,7 @@ def _assign_modes(
     trip_rows: list[dict] = []
     for tour_idx, tour in enumerate(day_plan.tours):
         mode_reasoning: str | None = None
+        prompt_mode: str | None = None
         if tour.trips:
             first_trip = tour.trips[0]
             if vehicle_access is not None:
@@ -291,7 +302,7 @@ def _assign_modes(
                 has_car,
             )
             if options:
-                mc = agent.choose_tour_mode(
+                mc, prompt_mode = agent.choose_tour_mode(
                     tour,
                     options,
                     client,
@@ -314,6 +325,7 @@ def _assign_modes(
                     "distance": trip.distance,
                     "escort_agent_id": trip.escort_agent_id,
                     "mode_reasoning": mode_reasoning,
+                    "prompt_mode": prompt_mode,
                 }
             )
     return trip_rows
@@ -434,13 +446,15 @@ def _simulate_household(
                 pois_by_type[act_type] = type_pois
 
         if member_schedules and pois_by_type:
-            joint = hh.plan_joint_activities(
+            joint, prompt_joint = hh.plan_joint_activities(
                 member_schedules,
                 pois_by_type,
                 skims,
                 client=client,  # type: ignore[arg-type]
                 model=model,
             )
+            for _, _, dpr, _ in agent_plans:
+                dpr["prompt_joint"] = prompt_joint
             # Inject joint activities as fixed anchors.
             for ja in joint:
                 for agent, day_plan, dpr, _ in agent_plans:
@@ -480,7 +494,7 @@ def _simulate_household(
                     parent_plans[agent.id] = day_plan
 
             if child_activities and parent_plans:
-                parent_plans = hh.plan_escort_trips(
+                parent_plans, prompt_escort = hh.plan_escort_trips(
                     child_activities,
                     parent_plans,
                     skims,
@@ -498,6 +512,7 @@ def _simulate_household(
                 ] = []
                 for agent, dp, dpr, ar in agent_plans:
                     if agent.id in parent_plans:
+                        dpr["prompt_escort"] = prompt_escort
                         new_dp = parent_plans[agent.id]
                         dpr["n_tours"] = len(new_dp.tours)
                         dpr["n_activities"] = len(new_dp.activities)
@@ -530,12 +545,14 @@ def _simulate_household(
 
     vehicle_alloc: dict[str, list[bool]] = {}
     if member_tours:
-        vehicle_alloc = hh.allocate_vehicles(
+        vehicle_alloc, prompt_vehicle_alloc = hh.allocate_vehicles(
             member_tours,
             skims,
             client=client,  # type: ignore[arg-type]
             model=model,
         )
+        for _, _, dpr, _ in agent_plans:
+            dpr["prompt_vehicle_alloc"] = prompt_vehicle_alloc
 
     # Phase 3: Mode choice with vehicle allocation.
     hh_trip_rows: list[dict] = []

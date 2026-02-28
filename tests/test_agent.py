@@ -100,9 +100,11 @@ def _mock_persona_client(persona: str) -> MagicMock:
 def test_generate_persona_returns_string() -> None:
     agent = Agent(name="Alice", age=30, employment="employed")
     mock = _mock_persona_client("Drives to work every day.")
-    result = agent.generate_persona(client=mock)
-    assert isinstance(result, str)
-    assert result == "Drives to work every day."
+    persona, prompt = agent.generate_persona(client=mock)
+    assert isinstance(persona, str)
+    assert persona == "Drives to work every day."
+    assert isinstance(prompt, str)
+    assert len(prompt) > 0
 
 
 def test_generate_persona_stores_on_agent() -> None:
@@ -152,17 +154,19 @@ def test_generate_persona_raises_on_empty_response() -> None:
 def test_generate_persona_skips_when_already_set() -> None:
     agent = Agent(name="Alice", persona="Existing persona.")
     mock = MagicMock()
-    result = agent.generate_persona(client=mock)
-    assert result == "Existing persona."
+    persona, prompt = agent.generate_persona(client=mock)
+    assert persona == "Existing persona."
+    assert prompt == ""
     mock.generate_json.assert_not_called()
 
 
 def test_generate_persona_overwrites_when_requested() -> None:
     agent = Agent(name="Alice", persona="Old persona.")
     mock = _mock_persona_client("New persona.")
-    result = agent.generate_persona(client=mock, overwrite=True)
-    assert result == "New persona."
+    persona, prompt = agent.generate_persona(client=mock, overwrite=True)
+    assert persona == "New persona."
     assert agent.persona == "New persona."
+    assert len(prompt) > 0
     mock.generate_json.assert_called_once()
 
 
@@ -186,28 +190,32 @@ def _mock_client(choice: str, reasoning: str) -> MagicMock:
 
 def test_choose_mode_returns_a_mode_choice() -> None:
     agent = Agent(name="Alice")
-    result = agent.choose_mode(OPTIONS, client=_mock_client("car", "Car is fastest."))
-    assert isinstance(result, ModeChoice)
+    mc, prompt = agent.choose_mode(
+        OPTIONS, client=_mock_client("car", "Car is fastest.")
+    )
+    assert isinstance(mc, ModeChoice)
+    assert isinstance(prompt, str)
+    assert len(prompt) > 0
 
 
 def test_choose_mode_option_is_one_of_the_options() -> None:
     agent = Agent(name="Alice")
-    result = agent.choose_mode(OPTIONS, client=_mock_client("bike", "I like cycling."))
-    assert result.option in OPTIONS
+    mc, _ = agent.choose_mode(OPTIONS, client=_mock_client("bike", "I like cycling."))
+    assert mc.option in OPTIONS
 
 
 def test_choose_mode_returns_correct_option() -> None:
     agent = Agent(name="Alice")
-    result = agent.choose_mode(
+    mc, _ = agent.choose_mode(
         OPTIONS, client=_mock_client("transit", "Bus is relaxing.")
     )
-    assert result.option.mode == "transit"
+    assert mc.option.mode == "transit"
 
 
 def test_choose_mode_includes_reasoning() -> None:
     agent = Agent(name="Alice")
-    result = agent.choose_mode(OPTIONS, client=_mock_client("car", "Car is fastest."))
-    assert result.reasoning == "Car is fastest."
+    mc, _ = agent.choose_mode(OPTIONS, client=_mock_client("car", "Car is fastest."))
+    assert mc.reasoning == "Car is fastest."
 
 
 def test_choose_mode_raises_on_empty_llm_response() -> None:
@@ -300,9 +308,11 @@ TRAVEL_TIMES = {
 def test_choose_work_zone_sets_work_zone() -> None:
     agent = Agent(name="Alice", age=30, employment="employed")
     mock = _mock_zone_client("zone_a")
-    result = agent.choose_work_zone(ZONES, TRAVEL_TIMES, client=mock)
-    assert result == "zone_a"
+    zone_id, prompt = agent.choose_work_zone(ZONES, TRAVEL_TIMES, client=mock)
+    assert zone_id == "zone_a"
     assert agent.work_zone == "zone_a"
+    assert isinstance(prompt, str)
+    assert len(prompt) > 0
 
 
 def test_choose_work_zone_raises_for_non_employed() -> None:
@@ -329,9 +339,11 @@ def test_choose_work_zone_prompt_includes_travel_times() -> None:
 def test_choose_school_zone_sets_school_zone() -> None:
     agent = Agent(name="Eve", age=16, employment="student")
     mock = _mock_zone_client("zone_b")
-    result = agent.choose_school_zone(ZONES, TRAVEL_TIMES, client=mock)
-    assert result == "zone_b"
+    zone_id, prompt = agent.choose_school_zone(ZONES, TRAVEL_TIMES, client=mock)
+    assert zone_id == "zone_b"
     assert agent.school_zone == "zone_b"
+    assert isinstance(prompt, str)
+    assert len(prompt) > 0
 
 
 def test_choose_school_zone_raises_for_non_student() -> None:
@@ -343,34 +355,42 @@ def test_choose_school_zone_raises_for_non_student() -> None:
 def test_choose_work_zone_skips_when_already_set() -> None:
     agent = Agent(name="Grace", age=30, employment="employed", work_zone="zone_x")
     mock = MagicMock()
-    result = agent.choose_work_zone(ZONES, TRAVEL_TIMES, client=mock)
-    assert result == "zone_x"
+    zone_id, prompt = agent.choose_work_zone(ZONES, TRAVEL_TIMES, client=mock)
+    assert zone_id == "zone_x"
+    assert prompt == ""
     mock.generate_json.assert_not_called()
 
 
 def test_choose_work_zone_overwrites_when_requested() -> None:
     agent = Agent(name="Grace", age=30, employment="employed", work_zone="zone_x")
     mock = _mock_zone_client("zone_a")
-    result = agent.choose_work_zone(ZONES, TRAVEL_TIMES, client=mock, overwrite=True)
-    assert result == "zone_a"
+    zone_id, prompt = agent.choose_work_zone(
+        ZONES, TRAVEL_TIMES, client=mock, overwrite=True
+    )
+    assert zone_id == "zone_a"
     assert agent.work_zone == "zone_a"
+    assert len(prompt) > 0
     mock.generate_json.assert_called_once()
 
 
 def test_choose_school_zone_skips_when_already_set() -> None:
     agent = Agent(name="Heidi", age=16, employment="student", school_zone="zone_y")
     mock = MagicMock()
-    result = agent.choose_school_zone(ZONES, TRAVEL_TIMES, client=mock)
-    assert result == "zone_y"
+    zone_id, prompt = agent.choose_school_zone(ZONES, TRAVEL_TIMES, client=mock)
+    assert zone_id == "zone_y"
+    assert prompt == ""
     mock.generate_json.assert_not_called()
 
 
 def test_choose_school_zone_overwrites_when_requested() -> None:
     agent = Agent(name="Heidi", age=16, employment="student", school_zone="zone_y")
     mock = _mock_zone_client("zone_b")
-    result = agent.choose_school_zone(ZONES, TRAVEL_TIMES, client=mock, overwrite=True)
-    assert result == "zone_b"
+    zone_id, prompt = agent.choose_school_zone(
+        ZONES, TRAVEL_TIMES, client=mock, overwrite=True
+    )
+    assert zone_id == "zone_b"
     assert agent.school_zone == "zone_b"
+    assert len(prompt) > 0
     mock.generate_json.assert_called_once()
 
 
@@ -387,10 +407,12 @@ def _mock_activities_client(activity_types: list[dict]) -> MagicMock:
 def test_generate_activities_returns_nonempty_list() -> None:
     agent = Agent(name="Alice", age=30, employment="employed", work_zone="zone_2")
     mock = _mock_activities_client([{"type": "work", "is_flexible": False}])
-    result = agent.generate_activities(client=mock)
-    assert isinstance(result, list)
-    assert len(result) > 0
-    assert all(isinstance(a, Activity) for a in result)
+    activities, prompt = agent.generate_activities(client=mock)
+    assert isinstance(activities, list)
+    assert len(activities) > 0
+    assert all(isinstance(a, Activity) for a in activities)
+    assert isinstance(prompt, str)
+    assert len(prompt) > 0
 
 
 def test_generate_activities_employed_has_work_activity() -> None:
@@ -401,8 +423,8 @@ def test_generate_activities_employed_has_work_activity() -> None:
             {"type": "shopping", "is_flexible": True},
         ]
     )
-    result = agent.generate_activities(client=mock)
-    work_activities = [a for a in result if a.type == "work"]
+    activities, _ = agent.generate_activities(client=mock)
+    work_activities = [a for a in activities if a.type == "work"]
     assert len(work_activities) == 1
     work = work_activities[0]
     assert work.location == "zone_work"
@@ -412,8 +434,8 @@ def test_generate_activities_employed_has_work_activity() -> None:
 def test_generate_activities_student_has_school_activity() -> None:
     agent = Agent(name="Carol", age=16, employment="student", school_zone="zone_school")
     mock = _mock_activities_client([{"type": "school", "is_flexible": False}])
-    result = agent.generate_activities(client=mock)
-    school_activities = [a for a in result if a.type == "school"]
+    activities, _ = agent.generate_activities(client=mock)
+    school_activities = [a for a in activities if a.type == "school"]
     assert len(school_activities) == 1
     school = school_activities[0]
     assert school.location == "zone_school"
@@ -443,8 +465,8 @@ def test_valid_out_of_home_types_is_complete() -> None:
 def test_generate_activities_retired_has_no_work_or_school() -> None:
     agent = Agent(name="Dave", age=67, employment="retired")
     mock = _mock_activities_client([{"type": "leisure", "is_flexible": True}])
-    result = agent.generate_activities(client=mock)
-    types_in_result = [a.type for a in result]
+    activities, _ = agent.generate_activities(client=mock)
+    types_in_result = [a.type for a in activities]
     assert "work" not in types_in_result
     assert "school" not in types_in_result
 
@@ -489,7 +511,7 @@ def test_choose_destination_sets_location() -> None:
     agent = Agent(name="Bob", age=30, employment="employed")
     activity = Activity(type="shopping")
     mock = _mock_destination_client("zone:zone_a")
-    result = agent.choose_destination(activity, candidates=ZONES, client=mock)
+    result, _ = agent.choose_destination(activity, candidates=ZONES, client=mock)
     assert result.location == "zone_a"
 
 
@@ -538,7 +560,7 @@ def test_choose_destination_with_pois_sets_location() -> None:
     agent = Agent(name="Eve", age=28, employment="employed")
     activity = Activity(type="shopping")
     mock = _mock_destination_client("poi:101")
-    result = agent.choose_destination(activity, pois=POIS, client=mock)
+    result, _ = agent.choose_destination(activity, pois=POIS, client=mock)
     assert result.location == "zone_a"
     assert result.poi_id == "101"
 
@@ -557,7 +579,7 @@ def test_choose_destination_with_both_zones_and_pois() -> None:
     agent = Agent(name="Grace", age=30, employment="employed")
     activity = Activity(type="shopping")
     mock = _mock_destination_client("poi:101")
-    result = agent.choose_destination(
+    result, _ = agent.choose_destination(
         activity, candidates=ZONES, pois=POIS, client=mock
     )
     assert result.location == "zone_a"
@@ -572,7 +594,7 @@ def test_choose_destination_strips_prefix_from_raw_id() -> None:
     agent = Agent(name="Helen", age=40, employment="employed")
     activity = Activity(type="shopping")
     mock = _mock_destination_client("zone:zone_b")
-    result = agent.choose_destination(activity, candidates=ZONES, client=mock)
+    result, _ = agent.choose_destination(activity, candidates=ZONES, client=mock)
     assert result.location == "zone_b"
     assert result.poi_id is None
 
@@ -581,7 +603,7 @@ def test_choose_destination_handles_bare_id() -> None:
     agent = Agent(name="Ivan", age=50, employment="employed")
     activity = Activity(type="shopping")
     mock = _mock_destination_client("zone_a")
-    result = agent.choose_destination(activity, candidates=ZONES, client=mock)
+    result, _ = agent.choose_destination(activity, candidates=ZONES, client=mock)
     assert result.location == "zone_a"
 
 
@@ -710,8 +732,10 @@ def test_schedule_activities_returns_day_plan() -> None:
     mock = _mock_schedule_client(
         [{"type": "work", "start_time": 480, "end_time": 1020}]
     )
-    result = agent.schedule_activities(activities, client=mock)
-    assert isinstance(result, DayPlan)
+    plan, prompt = agent.schedule_activities(activities, client=mock)
+    assert isinstance(plan, DayPlan)
+    assert isinstance(prompt, str)
+    assert len(prompt) > 0
 
 
 def test_schedule_activities_sorted_by_start_time() -> None:
@@ -726,8 +750,8 @@ def test_schedule_activities_sorted_by_start_time() -> None:
             {"type": "shopping", "start_time": 1080, "end_time": 1140},
         ]
     )
-    result = agent.schedule_activities(activities, client=mock)
-    start_times = [a.start_time for a in result.activities]
+    plan, _ = agent.schedule_activities(activities, client=mock)
+    start_times = [a.start_time for a in plan.activities]
     assert start_times == sorted(start_times)
 
 
@@ -737,8 +761,8 @@ def test_schedule_activities_sets_times_on_activities() -> None:
     mock = _mock_schedule_client(
         [{"type": "school", "start_time": 480, "end_time": 900}]
     )
-    result = agent.schedule_activities(activities, client=mock)
-    scheduled = result.activities[0]
+    plan, _ = agent.schedule_activities(activities, client=mock)
+    scheduled = plan.activities[0]
     assert scheduled.start_time == 480
     assert scheduled.end_time == 900
 
@@ -756,17 +780,18 @@ def test_schedule_activities_same_type_gets_different_times() -> None:
             {"type": "shopping", "start_time": 780, "end_time": 840},
         ]
     )
-    result = agent.schedule_activities(activities, client=mock)
-    assert result.activities[0].start_time == 600
-    assert result.activities[1].start_time == 780
+    plan, _ = agent.schedule_activities(activities, client=mock)
+    assert plan.activities[0].start_time == 600
+    assert plan.activities[1].start_time == 780
 
 
 def test_schedule_activities_empty_input_returns_empty_plan() -> None:
     agent = Agent(name="Dave", age=67, employment="retired")
     mock = MagicMock()
-    result = agent.schedule_activities([], client=mock)
-    assert isinstance(result, DayPlan)
-    assert result.activities == []
+    plan, prompt = agent.schedule_activities([], client=mock)
+    assert isinstance(plan, DayPlan)
+    assert plan.activities == []
+    assert prompt == ""
     mock.generate_json.assert_not_called()
 
 
@@ -868,10 +893,12 @@ def test_choose_tour_mode_sets_mode_on_all_trips() -> None:
     t2 = Trip(origin="w", destination="h")
     tour = Tour(trips=[t1, t2], home_zone="h")
     mock = _mock_client("car", "Driving today.")
-    result = agent.choose_tour_mode(tour, OPTIONS, client=mock)
-    assert result.option.mode == "car"
+    mc, prompt = agent.choose_tour_mode(tour, OPTIONS, client=mock)
+    assert mc.option.mode == "car"
     assert t1.mode == "car"
     assert t2.mode == "car"
+    assert isinstance(prompt, str)
+    assert len(prompt) > 0
 
 
 def test_choose_tour_mode_raises_on_empty_tour() -> None:
@@ -1005,7 +1032,7 @@ def test_plan_discretionary_activities_sets_fields() -> None:
             ]
         }
     )
-    result = agent.plan_discretionary_activities(
+    result, prompt = agent.plan_discretionary_activities(
         mandatory=[work],
         discretionary=[shopping],
         pois_by_type={"shopping": [poi]},
@@ -1018,6 +1045,8 @@ def test_plan_discretionary_activities_sets_fields() -> None:
     assert act.location == "zone_shop"
     assert act.start_time == 1050
     assert act.end_time == 1110
+    assert isinstance(prompt, str)
+    assert len(prompt) > 0
 
 
 def test_plan_discretionary_activities_prompt_content() -> None:
@@ -1081,7 +1110,7 @@ def test_plan_discretionary_activities_empty_returns_unchanged() -> None:
     """An empty discretionary list is returned without calling the LLM."""
     agent = Agent(name="Carol", age=25, employment="student")
     mock = MagicMock()
-    result = agent.plan_discretionary_activities(
+    result, prompt = agent.plan_discretionary_activities(
         mandatory=[],
         discretionary=[],
         pois_by_type={},
@@ -1089,6 +1118,7 @@ def test_plan_discretionary_activities_empty_returns_unchanged() -> None:
         client=mock,
     )
     assert result == []
+    assert prompt == ""
     mock.generate_json.assert_not_called()
 
 
@@ -1123,7 +1153,7 @@ def test_plan_discretionary_activities_bare_zone_id() -> None:
             ]
         }
     )
-    result = agent.plan_discretionary_activities(
+    result, _ = agent.plan_discretionary_activities(
         mandatory=[],
         discretionary=[leisure],
         pois_by_type={"leisure": [poi]},
