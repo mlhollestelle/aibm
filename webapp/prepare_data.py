@@ -71,7 +71,7 @@ def _fetch_buurten(wfs_url: str, bbox: tuple[int, int, int, int]) -> gpd.GeoData
 def _zone_buurt_names(
     zone_ids: list[str],
     buurten: gpd.GeoDataFrame,
-    name_col: str = "buurtnaam",
+    name_col: str = "statnaam",
 ) -> dict[str, str]:
     """Map zone IDs to buurt names via spatial join of cell centroids.
 
@@ -385,7 +385,7 @@ def main() -> None:
     try:
         bbox = tuple(int(v) for v in cfg["grid"]["bbox"])
         buurten = _fetch_buurten(cfg["boundaries"]["wfs_url"], bbox)  # type: ignore[arg-type]
-        zone_name_lut = _zone_buurt_names(zone_ids, buurten)
+        zone_name_lut = _zone_buurt_names(zone_ids, buurten, name_col="statnaam")
         print(f"Buurt lookup: {len(zone_name_lut)} zones mapped to area names")
     except Exception as exc:
         print(f"Warning: could not fetch buurten, using zone IDs ({exc})")

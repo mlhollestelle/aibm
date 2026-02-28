@@ -49,6 +49,7 @@ webapp = [
     { name = "osmnx" },
     { name = "pyarrow" },
     { name = "pyyaml" },
+    { name = "requests" },
     { name = "uvicorn" },
 ]
 
@@ -86,6 +87,7 @@ webapp = [
     { name = "osmnx", specifier = ">=2.0" },
     { name = "pyarrow", specifier = ">=15.0" },
     { name = "pyyaml", specifier = ">=6.0" },
+    { name = "requests", specifier = ">=2.31" },
     { name = "uvicorn", specifier = ">=0.34" },
 ]
 
