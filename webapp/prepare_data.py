@@ -109,6 +109,16 @@ def _add_travel_time_bike(
         data["travel_time_min"] = (length_km / bike_speed) * 60.0
 
 
+def _add_travel_time_walk(
+    graph: nx.MultiDiGraph,
+    walk_speed: float,
+) -> None:
+    """Add ``travel_time_min`` to walk graph edges."""
+    for _, _, data in graph.edges(data=True):
+        length_km = data["length"] / 1000.0
+        data["travel_time_min"] = (length_km / walk_speed) * 60.0
+
+
 def _compute_route_travel_time(
     graph: nx.MultiDiGraph,
     route_nodes: list[int],
@@ -245,12 +255,13 @@ def main() -> None:
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    # 1. Node lookup — merge car + bike nodes
+    # 1. Node lookup — merge car + bike + walk nodes
     node_lut: dict[int, list[float]] = {}
-    for mode in ("car", "bike"):
+    for mode in ("car", "bike", "walk"):
         nodes_path = data_dir / f"{name}_network_{mode}_nodes.parquet"
-        mode_lut = _node_lookup(nodes_path)
-        node_lut.update(mode_lut)
+        if nodes_path.exists():
+            mode_lut = _node_lookup(nodes_path)
+            node_lut.update(mode_lut)
     print(f"Node lookup: {len(node_lut)} nodes")
 
     # 2. Zone centroid lookup
@@ -277,13 +288,17 @@ def main() -> None:
     net_cfg = cfg["network"]
     highway_speeds = {k: float(v) for k, v in net_cfg["highway_speeds"].items()}
     mode_graphs: dict[str, nx.MultiDiGraph] = {}
-    for mode in ("car", "bike"):
+    for mode in ("car", "bike", "walk"):
         gpath = data_dir / f"{name}_network_{mode}.graphml"
+        if not gpath.exists():
+            continue
         g = ox.load_graphml(gpath)
         if mode == "car":
             _add_travel_time_car(g, highway_speeds, net_cfg["default_car_speed_kmh"])
-        else:
+        elif mode == "bike":
             _add_travel_time_bike(g, net_cfg["bike_speed_kmh"])
+        else:
+            _add_travel_time_walk(g, net_cfg["walk_speed_kmh"])
         mode_graphs[mode] = g
     print(f"Loaded {len(mode_graphs)} mode graphs")
 
