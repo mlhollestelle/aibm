@@ -5,6 +5,7 @@ Usage:
 """
 
 import json
+import math
 import re
 import sys
 from pathlib import Path
@@ -135,6 +136,36 @@ def _compute_route_travel_time(
     return total
 
 
+def _haversine_km(
+    lon1: float, lat1: float, lon2: float, lat2: float
+) -> float:
+    """Great-circle distance in km between two WGS84 points."""
+    R = 6371.0
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = math.sin(dlat / 2) ** 2 + (
+        math.cos(math.radians(lat1))
+        * math.cos(math.radians(lat2))
+        * math.sin(dlon / 2) ** 2
+    )
+    return R * 2 * math.asin(math.sqrt(a))
+
+
+def _compute_route_length_km(
+    graph: nx.MultiDiGraph,
+    route_nodes: list[int],
+) -> float:
+    """Sum OSM edge lengths (metres) along a route, return km."""
+    total = 0.0
+    for u, v in zip(route_nodes[:-1], route_nodes[1:]):
+        edge_data = graph.get_edge_data(u, v)
+        if edge_data is None:
+            continue
+        first = next(iter(edge_data.values()))
+        total += first.get("length", 0.0)
+    return total / 1000.0
+
+
 def export_agents(
     day_plans_path: Path,
     zone_lut: dict[str, list[float]],
@@ -200,6 +231,18 @@ def export_trips(
             # Fallback: assume 10 min travel
             arrival = departure + 10
 
+        # Compute distance_km from network edges or straight line
+        distance_km = None
+        if len(route_nodes) >= 2 and mode in mode_graphs:
+            d = _compute_route_length_km(mode_graphs[mode], route_nodes)
+            distance_km = round(d, 3)
+        elif len(coords) >= 2:
+            o_lon, o_lat = coords[0]
+            d_lon, d_lat = coords[-1]
+            distance_km = round(
+                _haversine_km(o_lon, o_lat, d_lon, d_lat), 3
+            )
+
         trips.append(
             {
                 "agent_id": row["agent_id"],
@@ -210,6 +253,7 @@ def export_trips(
                 "mode": mode,
                 "departure": departure,
                 "arrival": round(arrival, 1),
+                "distance_km": distance_km,
                 "route": coords,
             }
         )
