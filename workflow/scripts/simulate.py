@@ -25,6 +25,7 @@ from _config import load_config
 from aibm import (
     Agent,
     Household,
+    LLMClient,
     RateLimiter,
     Skim,
     Zone,
@@ -151,7 +152,7 @@ def _build_agent_plan(
     all_zones: list[Zone],
     all_pois: list,
     skims: list[Skim],
-    client: object,
+    client: LLMClient,
     n_zone_candidates: int,
 ) -> tuple[DayPlan | None, dict, list[dict]]:
     """Build an agent's day plan up to tour construction (no mode choice).
@@ -159,7 +160,7 @@ def _build_agent_plan(
     Returns:
         Tuple of (day_plan_or_None, day_plan_row, activity_rows).
     """
-    _, prompt_persona = agent.generate_persona(client, household=hh)  # type: ignore[arg-type]
+    _, prompt_persona = agent.generate_persona(client, household=hh)
 
     prompt_zone: str | None = None
     if agent.employment == "employed":
@@ -167,16 +168,16 @@ def _build_agent_plan(
             agent.home_zone, all_zones, skims, n_zone_candidates
         )
         if candidates:
-            _, prompt_zone = agent.choose_work_zone(candidates, travel_times, client)  # type: ignore[arg-type]
+            _, prompt_zone = agent.choose_work_zone(candidates, travel_times, client)
 
     if agent.employment == "student":
         candidates, travel_times = _nearest_zones(
             agent.home_zone, all_zones, skims, n_zone_candidates
         )
         if candidates:
-            _, prompt_zone = agent.choose_school_zone(candidates, travel_times, client)  # type: ignore[arg-type]
+            _, prompt_zone = agent.choose_school_zone(candidates, travel_times, client)
 
-    activities, prompt_activities = agent.generate_activities(client)  # type: ignore[arg-type]
+    activities, prompt_activities = agent.generate_activities(client)
 
     mandatory = [a for a in activities if not a.is_flexible]
     discretionary = [a for a in activities if a.is_flexible]
@@ -184,7 +185,7 @@ def _build_agent_plan(
     mandatory_plan, prompt_schedule = agent.schedule_activities(
         mandatory,
         client,
-        skims=skims,  # type: ignore[arg-type]
+        skims=skims,
     )
 
     time_windows = compute_time_windows(
@@ -203,12 +204,12 @@ def _build_agent_plan(
     planned_disc: list[Activity] = []
     prompt_discretionary: str | None = None
     if disc_with_pois:
-        planned_disc, prompt_discretionary = agent.plan_discretionary_activities(  # type: ignore[arg-type]
+        planned_disc, prompt_discretionary = agent.plan_discretionary_activities(
             mandatory_plan.activities,
             disc_with_pois,
             pois_by_type,
             skims,
-            client=client,  # type: ignore[arg-type]
+            client=client,
             time_windows=time_windows,
         )
 
@@ -269,7 +270,7 @@ def _assign_modes(
     hh: Household,
     day_plan: DayPlan,
     skims: list[Skim],
-    client: object,
+    client: LLMClient,
     vehicle_access: list[bool] | None = None,
 ) -> list[dict]:
     """Run mode choice for each tour and return trip rows.
@@ -311,7 +312,7 @@ def _assign_modes(
                     tour,
                     options,
                     client,
-                    hh,  # type: ignore[arg-type]
+                    hh,
                 )
                 mode_reasoning = mc.reasoning
 
@@ -342,7 +343,7 @@ def _simulate_agent(
     all_zones: list[Zone],
     all_pois: list,
     skims: list[Skim],
-    client: object,
+    client: LLMClient,
     n_zone_candidates: int,
     vehicle_access: list[bool] | None = None,
 ) -> tuple[list[dict], dict, list[dict]]:
@@ -394,7 +395,7 @@ def _simulate_household(
     all_zones: list[Zone],
     all_pois: list,
     skims: list[Skim],
-    client: object,
+    client: LLMClient,
     n_zone_candidates: int,
     model: str = "gpt-4o-mini",
 ) -> tuple[list[dict], list[dict], list[dict]]:
@@ -455,7 +456,7 @@ def _simulate_household(
                 member_schedules,
                 pois_by_type,
                 skims,
-                client=client,  # type: ignore[arg-type]
+                client=client,
                 model=model,
             )
             for _, _, dpr, _ in agent_plans:
@@ -498,7 +499,7 @@ def _simulate_household(
                     child_activities,
                     parent_plans,
                     skims,
-                    client=client,  # type: ignore[arg-type]
+                    client=client,
                     model=model,
                 )
                 # Update agent_plans with modified plans.
@@ -548,7 +549,7 @@ def _simulate_household(
         vehicle_alloc, prompt_vehicle_alloc = hh.allocate_vehicles(
             member_tours,
             skims,
-            client=client,  # type: ignore[arg-type]
+            client=client,
             model=model,
         )
         for _, _, dpr, _ in agent_plans:
@@ -619,7 +620,7 @@ def simulate(cfg: dict) -> None:
     # Build households up front.
     households: list[Household] = []
     for hh_id, group in sample.groupby("household_id"):
-        households.append(_reconstruct_household(int(hh_id), group, model))
+        households.append(_reconstruct_household(int(str(hh_id)), group, model))
 
     n_agents = sum(hh.size for hh in households)
     max_workers = sim.get("max_workers", 4)
