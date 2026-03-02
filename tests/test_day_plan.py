@@ -170,3 +170,30 @@ def test_windows_activity_fills_whole_day() -> None:
 def test_window_duration_property() -> None:
     w = TimeWindow(start=480, end=540, preceding_location=None, following_location=None)
     assert w.duration == 60.0
+
+
+# --- inject_joint ---
+
+
+def test_inject_joint_removes_flexible_duplicate() -> None:
+    """inject_joint replaces flexible same-type activity but keeps fixed ones."""
+    flex_eat = Activity(
+        type="eating_out", start_time=1020, end_time=1080, is_flexible=True
+    )
+    fixed_work = Activity(type="work", start_time=480, end_time=1020, is_flexible=False)
+    joint_eat = Activity(
+        type="eating_out",
+        start_time=1020,
+        end_time=1110,
+        is_flexible=False,
+        is_joint=True,
+        location="z_rest",
+    )
+
+    dp = DayPlan(activities=[fixed_work, flex_eat])
+    dp.inject_joint(joint_eat)
+
+    types = [a.type for a in dp.activities]
+    assert types.count("eating_out") == 1  # no duplicate
+    assert dp.activities[-1].is_joint is True  # joint version kept
+    assert any(a.type == "work" for a in dp.activities)  # fixed untouched
