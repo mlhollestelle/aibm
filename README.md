@@ -139,3 +139,8 @@ uv run uvicorn webapp.app:app --reload
 ```
 
 Open http://127.0.0.1:8000 in your browser.
+
+To customise the app content, edit these two files:
+
+- `webapp/content/about.md` — article shown in the "About this project" overlay
+- `webapp/content/config.yaml` — GitHub and LinkedIn URLs shown as icon links in the sidebar
