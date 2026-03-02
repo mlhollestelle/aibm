@@ -30,7 +30,10 @@ dev = [
     { name = "ruff" },
 ]
 notebooks = [
+    { name = "geopandas" },
     { name = "jupyterlab" },
+    { name = "openmatrix" },
+    { name = "pyarrow" },
 ]
 pipeline = [
     { name = "geopandas" },
@@ -69,7 +72,12 @@ dev = [
     { name = "pytest-cov", specifier = ">=5.0" },
     { name = "ruff", specifier = ">=0.9" },
 ]
-notebooks = [{ name = "jupyterlab", specifier = ">=4.0" }]
+notebooks = [
+    { name = "geopandas", specifier = ">=1.0" },
+    { name = "jupyterlab", specifier = ">=4.0" },
+    { name = "openmatrix", specifier = ">=0.3.5" },
+    { name = "pyarrow", specifier = ">=15.0" },
+]
 pipeline = [
     { name = "geopandas", specifier = ">=1.0" },
     { name = "numpy", specifier = ">=1.26" },
