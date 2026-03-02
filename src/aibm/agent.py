@@ -348,10 +348,12 @@ class Agent:
             client = create_client(self.model)
 
         background = self._build_background()
-        zones_text = "\n".join(
-            f"- {z.id}: {z.name} ({', '.join(k for k, v in z.land_use.items() if v)})"
-            for z in zones
-        )
+        zones_text_parts: list[str] = []
+        for z in zones:
+            label = f"{z.id}" if z.name == z.id else f"{z.id} ({z.name})"
+            poi_label = f" — {z.poi_count} relevant locations" if z.poi_count else ""
+            zones_text_parts.append(f"- {label}{poi_label}")
+        zones_text = "\n".join(zones_text_parts)
         travel_text = "\n".join(
             f"- {zid}: "
             + ", ".join(f"{mode} {mins:.0f} min" for mode, mins in modes.items())

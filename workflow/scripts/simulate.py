@@ -44,17 +44,48 @@ log = logging.getLogger(__name__)
 _ZONE_RE = re.compile(r"E(\d+)N(\d+)")
 
 
-def _zones_from_specs(zone_specs: pd.DataFrame) -> list[Zone]:
-    """Build Zone objects from the zone_specs parquet."""
+def _zones_from_specs(
+    zone_specs: pd.DataFrame,
+    all_pois: list,
+) -> list[Zone]:
+    """Build Zone objects from the zone_specs parquet.
+
+    Uses the ``buurt_name`` column as the human-readable zone name when
+    it is present and non-null; otherwise falls back to the grid code.
+    """
+    has_buurt = "buurt_name" in zone_specs.columns
     zones: list[Zone] = []
-    for zone_id in zone_specs["zone_id"].tolist():
-        m = _ZONE_RE.match(str(zone_id))
+    for _, row in zone_specs.iterrows():
+        zone_id = str(row["zone_id"])
+        m = _ZONE_RE.match(zone_id)
         if m is None:
             continue
         x = int(m.group(1)) * 100 + 50
         y = int(m.group(2)) * 100 + 50
-        zones.append(Zone(id=zone_id, name=zone_id, x=float(x), y=float(y)))
+        if has_buurt and pd.notna(row["buurt_name"]):
+            name = str(row["buurt_name"])
+        else:
+            name = zone_id
+        zones.append(Zone(id=zone_id, name=name, x=float(x), y=float(y)))
     return zones
+
+
+def _zone_poi_counts(pois: list, activity_types: set[str]) -> dict[str, int]:
+    """Count POIs per zone for the given activity types.
+
+    Args:
+        pois: All POIs in the study area.
+        activity_types: Set of activity type strings to count.
+
+    Returns:
+        Dict mapping zone_id to the number of matching POIs in that zone.
+        Zones with no matching POIs are absent from the dict.
+    """
+    counts: dict[str, int] = {}
+    for p in pois:
+        if p.activity_type in activity_types and p.zone_id:
+            counts[p.zone_id] = counts.get(p.zone_id, 0) + 1
+    return counts
 
 
 def _reconstruct_household(hh_id: int, group: pd.DataFrame, model: str) -> Household:
@@ -83,8 +114,13 @@ def _nearest_zones(
     all_zones: list[Zone],
     skims: list[Skim],
     n: int,
+    poi_counts: dict[str, int] | None = None,
 ) -> tuple[list[Zone], dict[str, dict[str, float]]]:
     """Return the n nearest reachable zones and their travel times.
+
+    When *poi_counts* is provided, only zones that contain at least one
+    relevant POI are considered. Each returned zone's ``poi_count``
+    attribute is stamped with the count from *poi_counts*.
 
     Zones are ranked by the minimum travel time across all modes.
 
@@ -93,6 +129,8 @@ def _nearest_zones(
         all_zones: All zones to consider.
         skims: Skim matrices for each mode.
         n: Maximum number of candidate zones.
+        poi_counts: Optional dict mapping zone_id to POI count. When
+            provided, zones absent from this dict are excluded.
 
     Returns:
         Tuple of (candidate_zones, travel_times) where travel_times
@@ -101,8 +139,14 @@ def _nearest_zones(
     if home_zone is None:
         return [], {}
 
+    eligible = (
+        [z for z in all_zones if poi_counts.get(z.id, 0) > 0]
+        if poi_counts is not None
+        else all_zones
+    )
+
     ranked: list[tuple[float, Zone]] = []
-    for z in all_zones:
+    for z in eligible:
         min_tt = min(
             (sk.travel_time(home_zone, z.id) for sk in skims),
             default=math.inf,
@@ -112,6 +156,10 @@ def _nearest_zones(
 
     ranked.sort(key=lambda t: t[0])
     candidates = [z for _, z in ranked[:n]]
+
+    if poi_counts is not None:
+        for z in candidates:
+            z.poi_count = poi_counts.get(z.id, 0)
 
     travel_times: dict[str, dict[str, float]] = {}
     for z in candidates:
@@ -154,6 +202,8 @@ def _build_agent_plan(
     skims: list[Skim],
     client: LLMClient,
     n_zone_candidates: int,
+    work_counts: dict[str, int] | None = None,
+    school_counts: dict[str, int] | None = None,
 ) -> tuple[DayPlan | None, dict, list[dict]]:
     """Build an agent's day plan up to tour construction (no mode choice).
 
@@ -165,14 +215,14 @@ def _build_agent_plan(
     prompt_zone: str | None = None
     if agent.employment == "employed":
         candidates, travel_times = _nearest_zones(
-            agent.home_zone, all_zones, skims, n_zone_candidates
+            agent.home_zone, all_zones, skims, n_zone_candidates, work_counts
         )
         if candidates:
             _, prompt_zone = agent.choose_work_zone(candidates, travel_times, client)
 
     if agent.employment == "student":
         candidates, travel_times = _nearest_zones(
-            agent.home_zone, all_zones, skims, n_zone_candidates
+            agent.home_zone, all_zones, skims, n_zone_candidates, school_counts
         )
         if candidates:
             _, prompt_zone = agent.choose_school_zone(candidates, travel_times, client)
@@ -398,6 +448,8 @@ def _simulate_household(
     client: LLMClient,
     n_zone_candidates: int,
     model: str = "gpt-4o-mini",
+    work_counts: dict[str, int] | None = None,
+    school_counts: dict[str, int] | None = None,
 ) -> tuple[list[dict], list[dict], list[dict]]:
     """Run all LLM steps for every member of a household.
 
@@ -412,6 +464,8 @@ def _simulate_household(
         client: LLM client (may be a RateLimiter).
         n_zone_candidates: Max zones offered for work/school choice.
         model: LLM model name forwarded to household-level calls.
+        work_counts: Zone-level POI counts for work zones.
+        school_counts: Zone-level POI counts for school zones.
 
     Returns:
         Tuple of (trip_rows, day_plan_rows, activity_rows) combined
@@ -430,6 +484,8 @@ def _simulate_household(
             skims,
             client,
             n_zone_candidates,
+            work_counts=work_counts,
+            school_counts=school_counts,
         )
         agent_plans.append((agent, day_plan, day_plan_row, activity_rows))
 
@@ -603,8 +659,16 @@ def simulate(cfg: dict) -> None:
         if Path(transit_path).exists():
             skims.append(load_skim(transit_path, "transit"))
 
-    all_zones = _zones_from_specs(zone_specs)
-    log.info("Loaded %d zones, %d POIs", len(all_zones), len(all_pois))
+    all_zones = _zones_from_specs(zone_specs, all_pois)
+    work_counts = _zone_poi_counts(all_pois, {"work"})
+    school_counts = _zone_poi_counts(all_pois, {"school", "escort"})
+    log.info(
+        "Loaded %d zones, %d POIs (%d work zones, %d school zones)",
+        len(all_zones),
+        len(all_pois),
+        len(work_counts),
+        len(school_counts),
+    )
 
     base_client = create_client(model)
     client = RateLimiter(
@@ -643,6 +707,8 @@ def simulate(cfg: dict) -> None:
                 client,
                 n_zone_candidates,
                 model,
+                work_counts,
+                school_counts,
             ): hh
             for hh in households
         }
