@@ -6,7 +6,7 @@ import pytest
 
 from aibm.activity import VALID_OUT_OF_HOME_TYPES, Activity
 from aibm.agent import Agent, ModeChoice, ModeOption
-from aibm.day_plan import DayPlan
+from aibm.day_plan import DayPlan, TimeWindow
 from aibm.household import Household
 from aibm.poi import POI
 from aibm.skim import Skim
@@ -1162,3 +1162,160 @@ def test_plan_discretionary_activities_bare_zone_id() -> None:
     )
     assert result[0].location == "zone_shop"
     assert result[0].poi_id is None
+
+
+_WINDOWS_AB = [
+    TimeWindow(
+        start=360,
+        end=465,
+        preceding_location="zone_home",
+        following_location="zone_work",
+    ),
+    TimeWindow(
+        start=1035,
+        end=1380,
+        preceding_location="zone_work",
+        following_location="zone_home",
+    ),
+]
+
+
+def _mock_disc_with_gap(gap: str) -> MagicMock:
+    mock = MagicMock()
+    mock.generate_json.return_value = json.dumps(
+        {
+            "planned_activities": [
+                {
+                    "type": "shopping",
+                    "gap": gap,
+                    "destination_id": "poi:p1",
+                    "start_time": 1050,
+                    "end_time": 1110,
+                    "reasoning": "After work.",
+                }
+            ]
+        }
+    )
+    return mock
+
+
+def test_plan_discretionary_activities_gap_labels_in_prompt() -> None:
+    """Gap labels (A, B) and the few-shot example appear when windows given."""
+    agent = Agent(
+        name="Alice",
+        age=30,
+        employment="employed",
+        home_zone="zone_home",
+        work_zone="zone_work",
+    )
+    work = Activity(
+        type="work",
+        is_flexible=False,
+        location="zone_work",
+        start_time=480,
+        end_time=1020,
+    )
+    shopping = Activity(type="shopping", is_flexible=True)
+    poi = POI(
+        id="p1",
+        name="Albert Heijn",
+        x=0.0,
+        y=0.0,
+        activity_type="shopping",
+        zone_id="zone_shop",
+    )
+    _, prompt = agent.plan_discretionary_activities(
+        mandatory=[work],
+        discretionary=[shopping],
+        pois_by_type={"shopping": [poi]},
+        skims=_make_3zone_skims(),
+        client=_mock_disc_with_gap("B"),
+        time_windows=_WINDOWS_AB,
+    )
+    assert "Gap A" in prompt
+    assert "Gap B" in prompt
+    assert "Emma" in prompt  # static example agent name
+
+
+def test_plan_discretionary_activities_gap_enum_in_schema() -> None:
+    """Schema includes a gap enum field when time windows are provided."""
+    agent = Agent(
+        name="Bob",
+        age=35,
+        employment="employed",
+        home_zone="zone_home",
+        work_zone="zone_work",
+    )
+    work = Activity(
+        type="work",
+        is_flexible=False,
+        location="zone_work",
+        start_time=480,
+        end_time=1020,
+    )
+    shopping = Activity(type="shopping", is_flexible=True)
+    poi = POI(
+        id="p1",
+        name="Albert Heijn",
+        x=0.0,
+        y=0.0,
+        activity_type="shopping",
+        zone_id="zone_shop",
+    )
+    mock = _mock_disc_with_gap("B")
+    agent.plan_discretionary_activities(
+        mandatory=[work],
+        discretionary=[shopping],
+        pois_by_type={"shopping": [poi]},
+        skims=_make_3zone_skims(),
+        client=mock,
+        time_windows=_WINDOWS_AB,
+    )
+    schema = mock.generate_json.call_args.kwargs["schema"]
+    item = schema["properties"]["planned_activities"]["items"]
+    assert "gap" in item["properties"]
+    assert item["properties"]["gap"]["enum"] == ["A", "B"]
+    assert "gap" in item["required"]
+
+
+def test_plan_discretionary_activities_no_gap_without_windows() -> None:
+    """Schema has no gap field when no time windows are provided."""
+    agent = Agent(
+        name="Carol",
+        age=25,
+        employment="student",
+        home_zone="zone_home",
+    )
+    leisure = Activity(type="leisure", is_flexible=True)
+    poi = POI(
+        id="px",
+        name="Park",
+        x=0.0,
+        y=0.0,
+        activity_type="leisure",
+        zone_id="zone_shop",
+    )
+    mock = MagicMock()
+    mock.generate_json.return_value = json.dumps(
+        {
+            "planned_activities": [
+                {
+                    "type": "leisure",
+                    "destination_id": "poi:px",
+                    "start_time": 900,
+                    "end_time": 1020,
+                    "reasoning": "Nice park.",
+                }
+            ]
+        }
+    )
+    agent.plan_discretionary_activities(
+        mandatory=[],
+        discretionary=[leisure],
+        pois_by_type={"leisure": [poi]},
+        skims=_make_3zone_skims(),
+        client=mock,
+    )
+    schema = mock.generate_json.call_args.kwargs["schema"]
+    item = schema["properties"]["planned_activities"]["items"]
+    assert "gap" not in item["properties"]

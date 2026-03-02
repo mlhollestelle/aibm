@@ -32,6 +32,25 @@ _ACTIVITY_MIN_DURATIONS: dict[str, str] = {
     "escort": "10–30 min",
 }
 
+# Static few-shot example injected into the discretionary planning prompt.
+# Uses a fictional agent so no real zone/POI IDs bleed into the example.
+_DISCRETIONARY_EXAMPLE = """\
+=== Example (different agent — for reference only) ===
+Emma (38, employed) works 08:30–16:30.
+Free gaps:
+  Gap A: 06:00–08:15 (135 min) — depart from home, arrive at work
+  Gap B: 16:45–23:00 (375 min) — depart from work, return home
+
+Emma wants to plan: shopping, eating_out.
+
+Correct plan:
+  shopping   → Gap B · 16:50–17:35 · supermarket near work
+    Reasoning: Morning gap is too short. Stopping for groceries on the
+    way home from work is the natural choice.
+  eating_out → Gap B · 19:30–20:30 · restaurant near home
+    Reasoning: A relaxed dinner in the evening after settling in at home.
+=== End example ==="""
+
 
 @dataclass
 class ModeOption:
@@ -840,43 +859,99 @@ class Agent:
                 "\nSuggested minimum durations:\n" + "\n".join(dur_lines) + "\n"
             )
 
-        windows_block = ""
+        # --- Label time windows and build narrative blocks ---
+        labeled_gaps: list[tuple[str, TimeWindow]] = []
         if time_windows:
-            lines = []
-            for w in time_windows:
-                from_label = w.preceding_location or "home"
-                to_label = w.following_location or "home"
-                lines.append(
-                    f"- {_fmt(w.start)}–{_fmt(w.end)} "
-                    f"({w.duration:.0f} min available, "
-                    f"depart from {from_label}, arrive at {to_label})"
-                )
-            windows_block = "\nAvailable time windows:\n" + "\n".join(lines) + "\n"
+            for i, w in enumerate(time_windows):
+                labeled_gaps.append((chr(ord("A") + i), w))
 
-        if time_windows:
-            constraint_text = (
-                "Only schedule activities within the listed time windows. "
-                "Account for travel time from the window's departure location "
-                "to each POI. You must be home no later than 23:00."
+        sorted_mandatory = sorted(
+            [
+                a
+                for a in mandatory
+                if a.start_time is not None and a.end_time is not None
+            ],
+            key=lambda a: a.start_time,  # type: ignore[arg-type]
+        )
+        timeline_lines = [f"  {_fmt(360.0)}  Day starts — you are at home."]
+        for act in sorted_mandatory:
+            assert act.start_time is not None
+            assert act.end_time is not None
+            act_label = act.type.replace("_", " ").capitalize()
+            timeline_lines.append(f"  {_fmt(act.start_time)}  {act_label} starts.")
+            timeline_lines.append(f"  {_fmt(act.end_time)}  {act_label} ends.")
+        timeline_lines.append(f"  {_fmt(1380.0)}  You must be home no later than this.")
+        timeline_block = "\nYour day in order:\n" + "\n".join(timeline_lines) + "\n"
+
+        gaps_block = ""
+        gap_labels: list[str] = []
+        if labeled_gaps:
+            gap_lines_list: list[str] = []
+            for label, w in labeled_gaps:
+                from_loc = w.preceding_location or "home"
+                to_loc = w.following_location or "home"
+                gap_lines_list.append(
+                    f"  Gap {label}: {_fmt(w.start)}–{_fmt(w.end)} "
+                    f"({w.duration:.0f} min) — depart from {from_loc}, "
+                    f"arrive at {to_loc}"
+                )
+            gaps_block = "\nFree time gaps:\n" + "\n".join(gap_lines_list) + "\n"
+            gap_labels = [lbl for lbl, _ in labeled_gaps]
+
+        # --- Prompt ---
+        if labeled_gaps:
+            prompt = (
+                f"You are {self.name}, planning the rest of your day.\n"
+                f"Background:\n{background}\n"
+                f"{timeline_block}"
+                f"{gaps_block}"
+                f"\n{_DISCRETIONARY_EXAMPLE}\n"
+                f"\nNow plan your activities:\n"
+                f"{disc_block}\n"
+                f"{duration_text}\n"
+                "For each activity: choose a destination, specify which gap "
+                "(A, B, …) it fits in, and assign start_time and end_time "
+                "in minutes from midnight that fall within that gap. "
+                "You must be home by 23:00. "
+                "Return one entry per activity in chronological order."
             )
         else:
-            constraint_text = (
-                "The schedule must be feasible: allow travel time between activities."
+            prompt = (
+                f"You are {self.name}, planning your discretionary "
+                "activities for today.\n"
+                f"Background:\n{background}\n"
+                f"{fixed_block}"
+                f"\nDiscretionary activities to plan:{disc_block}\n"
+                f"{duration_text}\n"
+                "For each activity choose a destination and assign "
+                "start_time and end_time (minutes from midnight, "
+                "e.g. 480 = 08:00). "
+                "The schedule must be feasible: allow travel time between "
+                "activities. "
+                "Return one entry per activity in chronological order."
             )
 
-        prompt = (
-            f"You are {self.name}, planning your discretionary "
-            "activities for today.\n"
-            f"Background:\n{background}\n"
-            f"{fixed_block}"
-            f"{windows_block}"
-            f"\nDiscretionary activities to plan:{disc_block}\n"
-            f"{duration_text}\n"
-            "For each activity choose a destination and assign "
-            "start_time and end_time (minutes from midnight, "
-            f"e.g. 480 = 08:00). {constraint_text} "
-            "Return one entry per activity in chronological order."
-        )
+        # --- Schema (gap field added only when labeled gaps exist) ---
+        activity_item_props: dict = {
+            "type": {"type": "string"},
+            "destination_id": {"type": "string"},
+            "start_time": {"type": "number"},
+            "end_time": {"type": "number"},
+            "reasoning": {"type": "string"},
+        }
+        required_fields = [
+            "type",
+            "destination_id",
+            "start_time",
+            "end_time",
+            "reasoning",
+        ]
+        if gap_labels:
+            activity_item_props["gap"] = {
+                "type": "string",
+                "enum": gap_labels,
+            }
+            required_fields = ["gap"] + required_fields
 
         text = client.generate_json(
             model=self.model,
@@ -888,20 +963,8 @@ class Agent:
                         "type": "array",
                         "items": {
                             "type": "object",
-                            "properties": {
-                                "type": {"type": "string"},
-                                "destination_id": {"type": "string"},
-                                "start_time": {"type": "number"},
-                                "end_time": {"type": "number"},
-                                "reasoning": {"type": "string"},
-                            },
-                            "required": [
-                                "type",
-                                "destination_id",
-                                "start_time",
-                                "end_time",
-                                "reasoning",
-                            ],
+                            "properties": activity_item_props,
+                            "required": required_fields,
                         },
                     }
                 },
