@@ -217,3 +217,22 @@ class DayPlan:
                     )
 
         return warnings
+
+    def inject_joint(self, activity: Activity) -> None:
+        """Replace any individual flexible activity of the same type with a joint one.
+
+        Removes all activities where ``is_flexible=True`` and
+        ``type == activity.type``, then appends *activity* and re-sorts by
+        start time. Call this instead of a plain ``append`` when injecting a
+        joint household activity so that the individual discretionary version
+        is superseded rather than duplicated.
+        """
+        self.activities = [
+            a
+            for a in self.activities
+            if not (a.is_flexible and a.type == activity.type)
+        ]
+        self.activities.append(activity)
+        self.activities.sort(
+            key=lambda a: a.start_time if a.start_time is not None else 0
+        )

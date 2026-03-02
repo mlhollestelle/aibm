@@ -464,12 +464,7 @@ def _simulate_household(
             for ja in joint:
                 for agent, day_plan, dpr, _ in agent_plans:
                     if agent.id in ja.participant_ids and day_plan is not None:
-                        day_plan.activities.append(ja.activity)
-                        day_plan.activities.sort(
-                            key=lambda a: (
-                                a.start_time if a.start_time is not None else 0
-                            )
-                        )
+                        day_plan.inject_joint(ja.activity)
                         # Rebuild tours.
                         day_plan.tours = []
                         agent.build_tours(day_plan)
