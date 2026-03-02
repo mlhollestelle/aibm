@@ -52,7 +52,7 @@ def _make_employed_setup() -> tuple:
         json.dumps({"zone_id": WORK, "reasoning": "Closest workplace."}),
         json.dumps({"activities": [{"type": "work", "is_flexible": False}]}),
         json.dumps(
-            {"schedule": [{"type": "work", "start_time": 480, "end_time": 960}]}
+            {"schedule": [{"type": "work", "start_time": "08:00", "end_time": "16:00"}]}
         ),
         json.dumps({"reasoning": "I have a car.", "choice": "car"}),
     )
@@ -119,7 +119,7 @@ def test_simulate_agent_no_vehicles_excludes_car():
         json.dumps({"zone_id": WORK, "reasoning": "Near."}),
         json.dumps({"activities": [{"type": "work", "is_flexible": False}]}),
         json.dumps(
-            {"schedule": [{"type": "work", "start_time": 480, "end_time": 960}]}
+            {"schedule": [{"type": "work", "start_time": "08:00", "end_time": "16:00"}]}
         ),
         json.dumps({"reasoning": "Only bike available.", "choice": "bike"}),
     )

@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from aibm.activity import VALID_OUT_OF_HOME_TYPES, Activity
-from aibm.agent import Agent, ModeChoice, ModeOption
+from aibm.agent import Agent, ModeChoice, ModeOption, _fmt_mins, _parse_hhmm
 from aibm.day_plan import DayPlan, TimeWindow
 from aibm.household import Household
 from aibm.poi import POI
@@ -13,6 +13,18 @@ from aibm.skim import Skim
 from aibm.tour import Tour
 from aibm.trip import Trip
 from aibm.zone import Zone
+
+
+def test_parse_hhmm() -> None:
+    assert _parse_hhmm("08:00") == 480.0
+    assert _parse_hhmm("17:30") == 1050.0
+    assert _parse_hhmm("00:00") == 0.0
+
+
+def test_fmt_mins() -> None:
+    assert _fmt_mins(480.0) == "08:00"
+    assert _fmt_mins(1050.0) == "17:30"
+    assert _fmt_mins(0.0) == "00:00"
 
 
 def test_agent_has_name() -> None:
@@ -730,7 +742,7 @@ def test_schedule_activities_returns_day_plan() -> None:
     agent = Agent(name="Alice", age=30, employment="employed")
     activities = [Activity(type="work", is_flexible=False)]
     mock = _mock_schedule_client(
-        [{"type": "work", "start_time": 480, "end_time": 1020}]
+        [{"type": "work", "start_time": "08:00", "end_time": "17:00"}]
     )
     plan, prompt = agent.schedule_activities(activities, client=mock)
     assert isinstance(plan, DayPlan)
@@ -746,8 +758,8 @@ def test_schedule_activities_sorted_by_start_time() -> None:
     ]
     mock = _mock_schedule_client(
         [
-            {"type": "work", "start_time": 480, "end_time": 1020},
-            {"type": "shopping", "start_time": 1080, "end_time": 1140},
+            {"type": "work", "start_time": "08:00", "end_time": "17:00"},
+            {"type": "shopping", "start_time": "18:00", "end_time": "19:00"},
         ]
     )
     plan, _ = agent.schedule_activities(activities, client=mock)
@@ -759,7 +771,7 @@ def test_schedule_activities_sets_times_on_activities() -> None:
     agent = Agent(name="Carol", age=25, employment="student")
     activities = [Activity(type="school", is_flexible=False)]
     mock = _mock_schedule_client(
-        [{"type": "school", "start_time": 480, "end_time": 900}]
+        [{"type": "school", "start_time": "08:00", "end_time": "15:00"}]
     )
     plan, _ = agent.schedule_activities(activities, client=mock)
     scheduled = plan.activities[0]
@@ -776,8 +788,8 @@ def test_schedule_activities_same_type_gets_different_times() -> None:
     ]
     mock = _mock_schedule_client(
         [
-            {"type": "shopping", "start_time": 600, "end_time": 660},
-            {"type": "shopping", "start_time": 780, "end_time": 840},
+            {"type": "shopping", "start_time": "10:00", "end_time": "11:00"},
+            {"type": "shopping", "start_time": "13:00", "end_time": "14:00"},
         ]
     )
     plan, _ = agent.schedule_activities(activities, client=mock)
@@ -933,8 +945,8 @@ def test_schedule_activities_travel_times_in_prompt() -> None:
     ]
     mock = _mock_schedule_client(
         [
-            {"type": "work", "start_time": 480, "end_time": 1020},
-            {"type": "shopping", "start_time": 1040, "end_time": 1100},
+            {"type": "work", "start_time": "08:00", "end_time": "17:00"},
+            {"type": "shopping", "start_time": "17:20", "end_time": "18:20"},
         ]
     )
     skims = _make_skims()  # car 12 min zone_a → zone_b
@@ -954,8 +966,8 @@ def test_schedule_activities_min_durations_in_prompt() -> None:
     ]
     mock = _mock_schedule_client(
         [
-            {"type": "work", "start_time": 480, "end_time": 1020},
-            {"type": "shopping", "start_time": 1040, "end_time": 1100},
+            {"type": "work", "start_time": "08:00", "end_time": "17:00"},
+            {"type": "shopping", "start_time": "17:20", "end_time": "18:20"},
         ]
     )
     agent.schedule_activities(activities, client=mock)
@@ -970,7 +982,7 @@ def test_schedule_activities_no_travel_times_without_skims() -> None:
     agent = Agent(name="Carol", age=25, employment="student")
     activities = [Activity(type="school", is_flexible=False, location="zone_a")]
     mock = _mock_schedule_client(
-        [{"type": "school", "start_time": 480, "end_time": 900}]
+        [{"type": "school", "start_time": "08:00", "end_time": "15:00"}]
     )
     agent.schedule_activities(activities, client=mock)  # no skims kwarg
     prompt = mock.generate_json.call_args.kwargs["prompt"]
@@ -1025,8 +1037,8 @@ def test_plan_discretionary_activities_sets_fields() -> None:
                 {
                     "type": "shopping",
                     "destination_id": "poi:p1",
-                    "start_time": 1050,
-                    "end_time": 1110,
+                    "start_time": "17:30",
+                    "end_time": "18:30",
                     "reasoning": "Convenient after work.",
                 }
             ]
@@ -1081,8 +1093,8 @@ def test_plan_discretionary_activities_prompt_content() -> None:
                 {
                     "type": "shopping",
                     "destination_id": "poi:p1",
-                    "start_time": 1080,
-                    "end_time": 1140,
+                    "start_time": "18:00",
+                    "end_time": "19:00",
                     "reasoning": "Close to work.",
                 }
             ]
@@ -1146,8 +1158,8 @@ def test_plan_discretionary_activities_bare_zone_id() -> None:
                 {
                     "type": "leisure",
                     "destination_id": "zone:zone_shop",
-                    "start_time": 900,
-                    "end_time": 1020,
+                    "start_time": "15:00",
+                    "end_time": "17:00",
                     "reasoning": "Nice park.",
                 }
             ]
@@ -1189,8 +1201,8 @@ def _mock_disc_with_gap(gap: str) -> MagicMock:
                     "type": "shopping",
                     "gap": gap,
                     "destination_id": "poi:p1",
-                    "start_time": 1050,
-                    "end_time": 1110,
+                    "start_time": "17:30",
+                    "end_time": "18:30",
                     "reasoning": "After work.",
                 }
             ]
@@ -1302,8 +1314,8 @@ def test_plan_discretionary_activities_no_gap_without_windows() -> None:
                 {
                     "type": "leisure",
                     "destination_id": "poi:px",
-                    "start_time": 900,
-                    "end_time": 1020,
+                    "start_time": "15:00",
+                    "end_time": "17:00",
                     "reasoning": "Nice park.",
                 }
             ]
