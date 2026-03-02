@@ -90,6 +90,12 @@ def build_and_save_specs(
         rows.append(row)
 
     out_df = pd.DataFrame(rows)
+
+    # Pass through buurt_name if the cleaned grid included it
+    if "buurt_name" in df.columns:
+        buurt_map = df.set_index("zone_id")["buurt_name"]
+        out_df["buurt_name"] = out_df["zone_id"].map(buurt_map)
+
     output_path.parent.mkdir(parents=True, exist_ok=True)
     out_df.to_parquet(output_path, index=False)
     print(f"Saved to {output_path}")

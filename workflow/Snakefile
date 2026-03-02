@@ -170,6 +170,7 @@ rule assign_network:
             "data/processed/{NAME}_network_{mode}.graphml", NAME=NAME, mode=MODES
         ),
         grid=f"data/processed/{NAME}_grid_clean.parquet",
+        zone_specs=f"data/processed/{NAME}_zone_specs.parquet",
         transit_stops=(
             [f"data/processed/{NAME}_transit_stops.graphml"] if TRANSIT else []
         ),

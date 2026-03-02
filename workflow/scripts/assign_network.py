@@ -298,6 +298,20 @@ def assign_network(cfg: dict) -> Path:
     result = trips.copy()
     result["route_nodes"] = route_nodes
 
+    # Add origin/destination buurt names from zone specs
+    specs_path = Path(f"data/processed/{name}_zone_specs.parquet")
+    if specs_path.exists():
+        specs = pd.read_parquet(specs_path)
+        if "buurt_name" in specs.columns:
+            zone_buurt = specs.set_index("zone_id")["buurt_name"].to_dict()
+            result["origin_buurt"] = (
+                result["origin"].map(zone_buurt).fillna(result["origin"])
+            )
+            result["destination_buurt"] = (
+                result["destination"].map(zone_buurt).fillna(result["destination"])
+            )
+            print("Added origin_buurt and destination_buurt columns")
+
     output = Path(f"data/processed/{name}_assigned_trips.parquet")
     output.parent.mkdir(parents=True, exist_ok=True)
     result.to_parquet(output, index=False)

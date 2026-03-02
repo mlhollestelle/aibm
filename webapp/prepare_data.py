@@ -18,10 +18,8 @@ import geopandas as gpd
 import networkx as nx
 import osmnx as ox
 import pandas as pd
-import requests
 from _config import load_config
 from pyproj import Transformer
-from shapely.geometry import Point
 
 _ZONE_RE = re.compile(r"E(\d+)N(\d+)")
 
@@ -45,66 +43,6 @@ def _zone_centroids_wgs84(
         northing = int(m.group(2)) * 100 + 50
         lon, lat = transformer.transform(easting, northing)
         result[zid] = [round(lon, 6), round(lat, 6)]
-    return result
-
-
-def _fetch_buurten(wfs_url: str, bbox: tuple[int, int, int, int]) -> gpd.GeoDataFrame:
-    """Fetch buurt boundaries from the CBS PDOK WFS for the study area."""
-    minx, miny, maxx, maxy = bbox
-    resp = requests.get(
-        wfs_url,
-        params={
-            "service": "WFS",
-            "version": "2.0.0",
-            "request": "GetFeature",
-            "typeNames": "gebiedsindelingen:buurt_gegeneraliseerd",
-            "outputFormat": "json",
-            "srsName": "EPSG:28992",
-            "bbox": (f"{minx},{miny},{maxx},{maxy},urn:ogc:def:crs:EPSG::28992"),
-        },
-        timeout=60,
-    )
-    resp.raise_for_status()
-    return gpd.GeoDataFrame.from_features(resp.json()["features"], crs="EPSG:28992")
-
-
-def _zone_buurt_names(
-    zone_ids: list[str],
-    buurten: gpd.GeoDataFrame,
-    name_col: str = "statnaam",
-) -> dict[str, str]:
-    """Map zone IDs to buurt names via spatial join of cell centroids.
-
-    Each 100 m grid cell centroid is matched to the buurt polygon it
-    falls within.  Cells that don't overlap any buurt keep their raw
-    zone ID as the display name.
-    """
-    records = []
-    for zid in zone_ids:
-        m = _ZONE_RE.match(zid)
-        if m is None:
-            continue
-        easting = int(m.group(1)) * 100 + 50
-        northing = int(m.group(2)) * 100 + 50
-        records.append({"zone_id": zid, "geometry": Point(easting, northing)})
-
-    if not records:
-        return {}
-
-    centroids = gpd.GeoDataFrame(records, crs="EPSG:28992")
-    joined = gpd.sjoin(
-        centroids,
-        buurten[[name_col, "geometry"]],
-        how="left",
-        predicate="within",
-    )
-
-    result: dict[str, str] = {}
-    for _, row in joined.iterrows():
-        name = row.get(name_col)
-        result[str(row["zone_id"])] = (
-            str(name) if pd.notna(name) else str(row["zone_id"])
-        )
     return result
 
 
@@ -260,12 +198,12 @@ def export_trips(
     trips_path: Path,
     node_lut: dict[int, list[float]],
     zone_lut: dict[str, list[float]],
-    zone_name_lut: dict[str, str],
     mode_graphs: dict[str, nx.MultiDiGraph],
     out_path: Path,
 ) -> None:
     """Write trips.json with route coords and arrival times."""
     df = pd.read_parquet(trips_path)
+    has_buurt = "origin_buurt" in df.columns
     trips = []
     for _, row in df.iterrows():
         route_nodes = row["route_nodes"]
@@ -307,6 +245,7 @@ def export_trips(
             o_lon, o_lat = coords[0]
             d_lon, d_lat = coords[-1]
             distance_km = round(_haversine_km(o_lon, o_lat, d_lon, d_lat), 3)
+
         trips.append(
             {
                 "agent_id": row["agent_id"],
@@ -314,8 +253,10 @@ def export_trips(
                 "trip_seq": int(row["trip_seq"]),
                 "origin": origin,
                 "destination": destination,
-                "origin_name": zone_name_lut.get(origin, origin),
-                "destination_name": zone_name_lut.get(destination, destination),
+                "origin_name": (str(row["origin_buurt"]) if has_buurt else origin),
+                "destination_name": (
+                    str(row["destination_buurt"]) if has_buurt else destination
+                ),
                 "mode": mode,
                 "departure": departure,
                 "arrival": round(arrival, 1),
@@ -380,15 +321,13 @@ def main() -> None:
     zone_lut = _zone_centroids_wgs84(zone_ids)
     print(f"Zone lookup: {len(zone_lut)} zones")
 
-    # 3. Buurt name lookup (zone_id → human-readable area name)
+    # 3. Zone name lookup — buurt_name added to zone specs during pipeline
     zone_name_lut: dict[str, str] = {}
-    try:
-        bbox = tuple(int(v) for v in cfg["grid"]["bbox"])
-        buurten = _fetch_buurten(cfg["boundaries"]["wfs_url"], bbox)  # type: ignore[arg-type]
-        zone_name_lut = _zone_buurt_names(zone_ids, buurten, name_col="statnaam")
-        print(f"Buurt lookup: {len(zone_name_lut)} zones mapped to area names")
-    except Exception as exc:
-        print(f"Warning: could not fetch buurten, using zone IDs ({exc})")
+    if "buurt_name" in specs.columns:
+        zone_name_lut = specs.set_index("zone_id")["buurt_name"].to_dict()
+        print(f"Zone name lookup: {len(zone_name_lut)} zones from pipeline")
+    else:
+        print("Warning: buurt_name not in zone specs, using zone IDs as names")
 
     # Save lookups for debugging / later use
     with open(OUT_DIR / "node_lookup.json", "w") as f:
@@ -400,11 +339,11 @@ def main() -> None:
     with open(OUT_DIR / "zone_lookup.json", "w") as f:
         json.dump(zone_lut, f)
 
-    # 3. Network GeoJSON
+    # 4. Network GeoJSON
     edges_path = data_dir / f"{name}_network_car_edges.parquet"
     export_network(edges_path, OUT_DIR / "network.geojson")
 
-    # 4. Load graphs with travel time weights (for trip arrival)
+    # 5. Load graphs with travel time weights (for trip arrival)
     net_cfg = cfg["network"]
     highway_speeds = {k: float(v) for k, v in net_cfg["highway_speeds"].items()}
     mode_graphs: dict[str, nx.MultiDiGraph] = {}
@@ -422,7 +361,7 @@ def main() -> None:
         mode_graphs[mode] = g
     print(f"Loaded {len(mode_graphs)} mode graphs")
 
-    # 5. Agents
+    # 6. Agents
     export_agents(
         data_dir / f"{name}_day_plans.parquet",
         zone_lut,
@@ -430,17 +369,16 @@ def main() -> None:
         OUT_DIR / "agents.json",
     )
 
-    # 6. Trips (with route geometry + computed arrival)
+    # 7. Trips (with route geometry + computed arrival)
     export_trips(
         data_dir / f"{name}_assigned_trips.parquet",
         node_lut,
         zone_lut,
-        zone_name_lut,
         mode_graphs,
         OUT_DIR / "trips.json",
     )
 
-    # 7. Activities
+    # 8. Activities
     export_activities(
         data_dir / f"{name}_activities.parquet",
         zone_lut,
