@@ -20,6 +20,9 @@ class Zone:
         land_use: Dict mapping land-use category names to booleans, e.g.
             ``{"residential": True, "commercial": False, "industrial": False}``.
             Defaults to an empty dict when not provided.
+        poi_count: Number of purpose-relevant POIs in this zone. Used when
+            presenting zone candidates to the LLM for work/school choice.
+            Defaults to 0.
     """
 
     id: str
@@ -27,3 +30,4 @@ class Zone:
     x: float
     y: float
     land_use: dict[str, bool] = field(default_factory=dict)
+    poi_count: int = 0
