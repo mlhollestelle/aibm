@@ -35,7 +35,7 @@ from aibm import (
 )
 from aibm.activity import Activity
 from aibm.agent import ModeOption
-from aibm.day_plan import DayPlan
+from aibm.day_plan import DayPlan, compute_time_windows
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 log = logging.getLogger(__name__)
@@ -187,6 +187,10 @@ def _build_agent_plan(
         skims=skims,  # type: ignore[arg-type]
     )
 
+    time_windows = compute_time_windows(
+        mandatory_plan, skims, home_zone=agent.home_zone
+    )
+
     pois_by_type: dict[str, list] = {}
     for act in discretionary:
         if act.type not in pois_by_type:
@@ -205,6 +209,7 @@ def _build_agent_plan(
             pois_by_type,
             skims,
             client=client,  # type: ignore[arg-type]
+            time_windows=time_windows,
         )
 
     all_activities = mandatory_plan.activities + planned_disc

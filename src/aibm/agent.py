@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from aibm.activity import VALID_OUT_OF_HOME_TYPES, Activity
-from aibm.day_plan import DayPlan
+from aibm.day_plan import DayPlan, TimeWindow
 from aibm.llm import LLMClient, create_client
 from aibm.poi import POI
 from aibm.sampling import sample_destinations
@@ -726,6 +726,7 @@ class Agent:
         client: LLMClient | None = None,
         n_candidates: int = 10,
         rng: random.Random | None = None,
+        time_windows: list[TimeWindow] | None = None,
     ) -> tuple[list[Activity], str]:
         """Plan destination and time for discretionary activities together.
 
@@ -839,17 +840,41 @@ class Agent:
                 "\nSuggested minimum durations:\n" + "\n".join(dur_lines) + "\n"
             )
 
+        windows_block = ""
+        if time_windows:
+            lines = []
+            for w in time_windows:
+                from_label = w.preceding_location or "home"
+                to_label = w.following_location or "home"
+                lines.append(
+                    f"- {_fmt(w.start)}–{_fmt(w.end)} "
+                    f"({w.duration:.0f} min available, "
+                    f"depart from {from_label}, arrive at {to_label})"
+                )
+            windows_block = "\nAvailable time windows:\n" + "\n".join(lines) + "\n"
+
+        if time_windows:
+            constraint_text = (
+                "Only schedule activities within the listed time windows. "
+                "Account for travel time from the window's departure location "
+                "to each POI. You must be home no later than 23:00."
+            )
+        else:
+            constraint_text = (
+                "The schedule must be feasible: allow travel time between activities."
+            )
+
         prompt = (
             f"You are {self.name}, planning your discretionary "
             "activities for today.\n"
             f"Background:\n{background}\n"
             f"{fixed_block}"
+            f"{windows_block}"
             f"\nDiscretionary activities to plan:{disc_block}\n"
             f"{duration_text}\n"
             "For each activity choose a destination and assign "
             "start_time and end_time (minutes from midnight, "
-            "e.g. 480 = 08:00). The schedule must be feasible: "
-            "allow travel time between activities. "
+            f"e.g. 480 = 08:00). {constraint_text} "
             "Return one entry per activity in chronological order."
         )
 
