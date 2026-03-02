@@ -32,6 +32,20 @@ _ACTIVITY_MIN_DURATIONS: dict[str, str] = {
     "escort": "10–30 min",
 }
 
+
+def _parse_hhmm(value: str) -> float:
+    """Parse a HH:MM string to minutes from midnight (e.g. '17:30' → 1050.0)."""
+    h, m = value.split(":")
+    return int(h) * 60 + int(m)
+
+
+def _fmt_mins(mins: float) -> str:
+    """Format minutes from midnight as HH:MM (e.g. 1050.0 → '17:30')."""
+    h = int(mins) // 60
+    m = int(mins) % 60
+    return f"{h:02d}:{m:02d}"
+
+
 # Static few-shot example injected into the discretionary planning prompt.
 # Uses a fictional agent so no real zone/POI IDs bleed into the example.
 _DISCRETIONARY_EXAMPLE = """\
@@ -688,8 +702,8 @@ class Agent:
             f"Activities to schedule:\n{activities_text}\n"
             f"{travel_text}"
             f"{duration_text}\n"
-            "Assign a start_time and end_time (in minutes from midnight, "
-            "e.g. 480 = 08:00) to each activity. "
+            "Assign a start_time and end_time (as HH:MM strings, "
+            'e.g. "08:00") to each activity. '
             "Ensure each activity starts at least as late as the previous "
             "activity's end_time plus the travel time to reach it. "
             "Fixed activities have realistic fixed hours; flexible ones fill "
@@ -708,8 +722,8 @@ class Agent:
                             "type": "object",
                             "properties": {
                                 "type": {"type": "string"},
-                                "start_time": {"type": "number"},
-                                "end_time": {"type": "number"},
+                                "start_time": {"type": "string"},
+                                "end_time": {"type": "string"},
                             },
                             "required": [
                                 "type",
@@ -727,8 +741,8 @@ class Agent:
 
         for i, item in enumerate(data["schedule"]):
             if i < len(activities):
-                activities[i].start_time = item["start_time"]
-                activities[i].end_time = item["end_time"]
+                activities[i].start_time = _parse_hhmm(item["start_time"])
+                activities[i].end_time = _parse_hhmm(item["end_time"])
 
         sorted_activities = sorted(
             activities,
@@ -776,11 +790,6 @@ class Agent:
         if client is None:
             client = create_client(self.model)
 
-        def _fmt(mins: float) -> str:
-            h = int(mins) // 60
-            m = int(mins) % 60
-            return f"{h:02d}:{m:02d}"
-
         background = self._build_background()
 
         # --- Fixed activities block ---
@@ -788,7 +797,7 @@ class Agent:
         for act in mandatory:
             if act.start_time is None or act.end_time is None or act.location is None:
                 continue
-            time_str = f"{_fmt(act.start_time)}–{_fmt(act.end_time)}"
+            time_str = f"{_fmt_mins(act.start_time)}–{_fmt_mins(act.end_time)}"
             tt_parts: list[str] = []
             if self.home_zone:
                 for sk in skims:
@@ -873,14 +882,16 @@ class Agent:
             ],
             key=lambda a: a.start_time,  # type: ignore[arg-type]
         )
-        timeline_lines = [f"  {_fmt(360.0)}  Day starts — you are at home."]
+        timeline_lines = [f"  {_fmt_mins(360.0)}  Day starts — you are at home."]
         for act in sorted_mandatory:
             assert act.start_time is not None
             assert act.end_time is not None
             act_label = act.type.replace("_", " ").capitalize()
-            timeline_lines.append(f"  {_fmt(act.start_time)}  {act_label} starts.")
-            timeline_lines.append(f"  {_fmt(act.end_time)}  {act_label} ends.")
-        timeline_lines.append(f"  {_fmt(1380.0)}  You must be home no later than this.")
+            timeline_lines.append(f"  {_fmt_mins(act.start_time)}  {act_label} starts.")
+            timeline_lines.append(f"  {_fmt_mins(act.end_time)}  {act_label} ends.")
+        timeline_lines.append(
+            f"  {_fmt_mins(1380.0)}  You must be home no later than this."
+        )
         timeline_block = "\nYour day in order:\n" + "\n".join(timeline_lines) + "\n"
 
         gaps_block = ""
@@ -891,7 +902,7 @@ class Agent:
                 from_loc = w.preceding_location or "home"
                 to_loc = w.following_location or "home"
                 gap_lines_list.append(
-                    f"  Gap {label}: {_fmt(w.start)}–{_fmt(w.end)} "
+                    f"  Gap {label}: {_fmt_mins(w.start)}–{_fmt_mins(w.end)} "
                     f"({w.duration:.0f} min) — depart from {from_loc}, "
                     f"arrive at {to_loc}"
                 )
@@ -911,7 +922,7 @@ class Agent:
                 f"{duration_text}\n"
                 "For each activity: choose a destination, specify which gap "
                 "(A, B, …) it fits in, and assign start_time and end_time "
-                "in minutes from midnight that fall within that gap. "
+                'as HH:MM strings (e.g. "17:30") that fall within that gap. '
                 "You must be home by 23:00. "
                 "Return one entry per activity in chronological order."
             )
@@ -924,8 +935,7 @@ class Agent:
                 f"\nDiscretionary activities to plan:{disc_block}\n"
                 f"{duration_text}\n"
                 "For each activity choose a destination and assign "
-                "start_time and end_time (minutes from midnight, "
-                "e.g. 480 = 08:00). "
+                'start_time and end_time as HH:MM strings (e.g. "08:00"). '
                 "The schedule must be feasible: allow travel time between "
                 "activities. "
                 "Return one entry per activity in chronological order."
@@ -935,8 +945,8 @@ class Agent:
         activity_item_props: dict = {
             "type": {"type": "string"},
             "destination_id": {"type": "string"},
-            "start_time": {"type": "number"},
-            "end_time": {"type": "number"},
+            "start_time": {"type": "string"},
+            "end_time": {"type": "string"},
             "reasoning": {"type": "string"},
         }
         required_fields = [
@@ -1008,8 +1018,8 @@ class Agent:
             else:
                 act.location = chosen_id
 
-            act.start_time = item["start_time"]
-            act.end_time = item["end_time"]
+            act.start_time = _parse_hhmm(item["start_time"])
+            act.end_time = _parse_hhmm(item["end_time"])
 
         return discretionary, prompt
 

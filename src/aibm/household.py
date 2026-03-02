@@ -7,7 +7,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from aibm.agent import Agent
+from aibm.agent import Agent, _fmt_mins, _parse_hhmm
 
 if TYPE_CHECKING:
     import random
@@ -299,7 +299,9 @@ class Household:
             for act in acts:
                 time_str = ""
                 if act.start_time is not None and act.end_time is not None:
-                    time_str = f" ({act.start_time:.0f}–{act.end_time:.0f})"
+                    time_str = (
+                        f" ({_fmt_mins(act.start_time)}–{_fmt_mins(act.end_time)})"
+                    )
                 loc = act.location or "unknown"
                 child_lines.append(
                     f"- {child.name} (id={cid}): {act.type} at {loc}{time_str}"
@@ -309,7 +311,7 @@ class Household:
         for p in available_parents:
             dp = parent_plans[p.id]
             sched = ", ".join(
-                f"{a.type} {a.start_time:.0f}–{a.end_time:.0f}"
+                f"{a.type} {_fmt_mins(a.start_time)}–{_fmt_mins(a.end_time)}"
                 for a in dp.activities
                 if a.start_time is not None and a.end_time is not None
             )
@@ -484,7 +486,8 @@ class Household:
             for a in acts:
                 if a.start_time is not None and a.end_time is not None:
                     sched_parts.append(
-                        f"{a.type} {a.start_time:.0f}\u2013{a.end_time:.0f}"
+                        f"{a.type} "
+                        f"{_fmt_mins(a.start_time)}\u2013{_fmt_mins(a.end_time)}"
                     )
             sched_str = ", ".join(sched_parts) if sched_parts else "no fixed activities"
             persona = m.persona or ""
@@ -549,10 +552,10 @@ class Household:
                                     "type": "string",
                                 },
                                 "start_time": {
-                                    "type": "number",
+                                    "type": "string",
                                 },
                                 "end_time": {
-                                    "type": "number",
+                                    "type": "string",
                                 },
                                 "participant_ids": {
                                     "type": "array",
@@ -608,8 +611,8 @@ class Household:
                 type=item["activity_type"],
                 location=location,
                 poi_id=poi_id,
-                start_time=item["start_time"],
-                end_time=item["end_time"],
+                start_time=_parse_hhmm(item["start_time"]),
+                end_time=_parse_hhmm(item["end_time"]),
                 is_flexible=False,
                 is_joint=True,
             )

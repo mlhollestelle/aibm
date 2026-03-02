@@ -543,8 +543,8 @@ def test_plan_joint_activities_result() -> None:
                 {
                     "activity_type": "shopping",
                     "destination_id": "poi:shop1",
-                    "start_time": 1080,
-                    "end_time": 1140,
+                    "start_time": "18:00",
+                    "end_time": "19:00",
                     "participant_ids": [
                         alice.id,
                         bob.id,
@@ -612,8 +612,8 @@ def test_joint_injected_as_fixed() -> None:
                 {
                     "activity_type": "shopping",
                     "destination_id": "poi:shop1",
-                    "start_time": 1080,
-                    "end_time": 1140,
+                    "start_time": "18:00",
+                    "end_time": "19:00",
                     "participant_ids": [
                         alice.id,
                         bob.id,
