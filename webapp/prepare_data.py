@@ -136,9 +136,7 @@ def _compute_route_travel_time(
     return total
 
 
-def _haversine_km(
-    lon1: float, lat1: float, lon2: float, lat2: float
-) -> float:
+def _haversine_km(lon1: float, lat1: float, lon2: float, lat2: float) -> float:
     """Great-circle distance in km between two WGS84 points."""
     R = 6371.0
     dlat = math.radians(lat2 - lat1)
@@ -169,13 +167,15 @@ def _compute_route_length_km(
 def export_agents(
     day_plans_path: Path,
     zone_lut: dict[str, list[float]],
+    zone_name_lut: dict[str, str],
     out_path: Path,
 ) -> None:
     """Write agents.json from day plans parquet."""
     dp = pd.read_parquet(day_plans_path)
     agents = []
     for _, row in dp.iterrows():
-        home = zone_lut.get(row["home_zone"])
+        home_zone = row["home_zone"]
+        home = zone_lut.get(home_zone)
         if home is None:
             continue
         agents.append(
@@ -186,6 +186,7 @@ def export_agents(
                 "employment": row["employment"],
                 "persona": row["persona"],
                 "home": home,
+                "home_name": zone_name_lut.get(home_zone, home_zone),
             }
         )
     with open(out_path, "w") as f:
@@ -202,6 +203,7 @@ def export_trips(
 ) -> None:
     """Write trips.json with route coords and arrival times."""
     df = pd.read_parquet(trips_path)
+    has_buurt = "origin_buurt" in df.columns
     trips = []
     for _, row in df.iterrows():
         route_nodes = row["route_nodes"]
@@ -231,6 +233,9 @@ def export_trips(
             # Fallback: assume 10 min travel
             arrival = departure + 10
 
+        origin = str(row["origin"])
+        destination = str(row["destination"])
+
         # Compute distance_km from network edges or straight line
         distance_km = None
         if len(route_nodes) >= 2 and mode in mode_graphs:
@@ -239,17 +244,19 @@ def export_trips(
         elif len(coords) >= 2:
             o_lon, o_lat = coords[0]
             d_lon, d_lat = coords[-1]
-            distance_km = round(
-                _haversine_km(o_lon, o_lat, d_lon, d_lat), 3
-            )
+            distance_km = round(_haversine_km(o_lon, o_lat, d_lon, d_lat), 3)
 
         trips.append(
             {
                 "agent_id": row["agent_id"],
                 "tour_idx": int(row["tour_idx"]),
                 "trip_seq": int(row["trip_seq"]),
-                "origin": str(row["origin"]),
-                "destination": str(row["destination"]),
+                "origin": origin,
+                "destination": destination,
+                "origin_name": (str(row["origin_buurt"]) if has_buurt else origin),
+                "destination_name": (
+                    str(row["destination_buurt"]) if has_buurt else destination
+                ),
                 "mode": mode,
                 "departure": departure,
                 "arrival": round(arrival, 1),
@@ -314,6 +321,14 @@ def main() -> None:
     zone_lut = _zone_centroids_wgs84(zone_ids)
     print(f"Zone lookup: {len(zone_lut)} zones")
 
+    # 3. Zone name lookup — buurt_name added to zone specs during pipeline
+    zone_name_lut: dict[str, str] = {}
+    if "buurt_name" in specs.columns:
+        zone_name_lut = specs.set_index("zone_id")["buurt_name"].to_dict()
+        print(f"Zone name lookup: {len(zone_name_lut)} zones from pipeline")
+    else:
+        print("Warning: buurt_name not in zone specs, using zone IDs as names")
+
     # Save lookups for debugging / later use
     with open(OUT_DIR / "node_lookup.json", "w") as f:
         json.dump(
@@ -324,11 +339,11 @@ def main() -> None:
     with open(OUT_DIR / "zone_lookup.json", "w") as f:
         json.dump(zone_lut, f)
 
-    # 3. Network GeoJSON
+    # 4. Network GeoJSON
     edges_path = data_dir / f"{name}_network_car_edges.parquet"
     export_network(edges_path, OUT_DIR / "network.geojson")
 
-    # 4. Load graphs with travel time weights (for trip arrival)
+    # 5. Load graphs with travel time weights (for trip arrival)
     net_cfg = cfg["network"]
     highway_speeds = {k: float(v) for k, v in net_cfg["highway_speeds"].items()}
     mode_graphs: dict[str, nx.MultiDiGraph] = {}
@@ -346,14 +361,15 @@ def main() -> None:
         mode_graphs[mode] = g
     print(f"Loaded {len(mode_graphs)} mode graphs")
 
-    # 5. Agents
+    # 6. Agents
     export_agents(
         data_dir / f"{name}_day_plans.parquet",
         zone_lut,
+        zone_name_lut,
         OUT_DIR / "agents.json",
     )
 
-    # 6. Trips (with route geometry + computed arrival)
+    # 7. Trips (with route geometry + computed arrival)
     export_trips(
         data_dir / f"{name}_assigned_trips.parquet",
         node_lut,
@@ -362,7 +378,7 @@ def main() -> None:
         OUT_DIR / "trips.json",
     )
 
-    # 7. Activities
+    # 8. Activities
     export_activities(
         data_dir / f"{name}_activities.parquet",
         zone_lut,

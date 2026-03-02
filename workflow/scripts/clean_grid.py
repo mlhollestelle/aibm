@@ -1,21 +1,82 @@
 """Clean CBS grid data for population synthesis.
 
 Handles CBS anonymisation codes, remaps age groups to ZoneSpec
-brackets, and derives household size distributions.
+brackets, derives household size distributions, and adds a
+``buurt_name`` column from the CBS PDOK WFS.
 """
 
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent))
+
+# isort: split
 
 import geopandas as gpd
 import pandas as pd
+import requests
+from _config import load_config
 
 INPUT = Path("data/processed/walcheren_grid_raw.parquet")
 OUTPUT = Path("data/processed/walcheren_grid_clean.parquet")
 
 
+def _fetch_buurten(
+    wfs_url: str,
+    bbox: tuple[int, int, int, int],
+) -> gpd.GeoDataFrame:
+    """Fetch buurt boundaries from the CBS PDOK WFS for the study area."""
+    minx, miny, maxx, maxy = bbox
+    resp = requests.get(
+        wfs_url,
+        params={
+            "service": "WFS",
+            "version": "2.0.0",
+            "request": "GetFeature",
+            "typeNames": "gebiedsindelingen:buurt_gegeneraliseerd",
+            "outputFormat": "json",
+            "srsName": "EPSG:28992",
+            "bbox": (f"{minx},{miny},{maxx},{maxy},urn:ogc:def:crs:EPSG::28992"),
+        },
+        timeout=60,
+    )
+    resp.raise_for_status()
+    return gpd.GeoDataFrame.from_features(resp.json()["features"], crs="EPSG:28992")
+
+
+def _add_buurt_names(
+    gdf: gpd.GeoDataFrame,
+    buurten: gpd.GeoDataFrame,
+    name_col: str = "statnaam",
+) -> gpd.GeoDataFrame:
+    """Add ``buurt_name`` column via centroid spatial join with buurt polygons.
+
+    Each grid cell centroid is matched to the buurt polygon it falls
+    within.  Cells with no match keep their ``zone_id`` as a fallback.
+    """
+    centroids = gpd.GeoDataFrame(
+        {"zone_id": gdf["zone_id"]},
+        geometry=gdf.geometry.centroid,
+        crs=gdf.crs,
+    )
+    joined = gpd.sjoin(
+        centroids,
+        buurten[[name_col, "geometry"]],
+        how="left",
+        predicate="within",
+    )
+    # Guard against duplicates if a centroid touches two polygons
+    joined = joined[~joined.index.duplicated(keep="first")]
+    gdf = gdf.copy()
+    gdf["buurt_name"] = joined[name_col].fillna(gdf["zone_id"]).values
+    return gdf
+
+
 def clean_grid(
     input_path: Path = INPUT,
     output_path: Path = OUTPUT,
+    wfs_url: str | None = None,
+    bbox: tuple[int, int, int, int] | None = None,
 ) -> Path:
     """Clean raw grid and prepare columns for ZoneSpec."""
     gdf = gpd.read_parquet(input_path)
@@ -83,6 +144,20 @@ def clean_grid(
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     result = gpd.GeoDataFrame(df, geometry=geometry.loc[df.index], crs=gdf.crs)
+
+    # Add buurt name per grid cell via spatial join with CBS WFS
+    if wfs_url and bbox:
+        try:
+            buurten = _fetch_buurten(wfs_url, bbox)
+            result = _add_buurt_names(result, buurten)
+            n_named = (result["buurt_name"] != result["zone_id"]).sum()
+            print(f"Added buurt names: {n_named} zones matched")
+        except Exception as exc:
+            print(f"Warning: buurt fetch failed ({exc}), using zone IDs")
+            result["buurt_name"] = result["zone_id"]
+    else:
+        result["buurt_name"] = result["zone_id"]
+
     result.to_parquet(output_path, index=False)
     print(f"Saved to {output_path}")
 
@@ -94,4 +169,8 @@ def clean_grid(
 
 
 if __name__ == "__main__":
-    clean_grid()
+    cfg = load_config()
+    clean_grid(
+        wfs_url=cfg["boundaries"]["wfs_url"],
+        bbox=tuple(int(v) for v in cfg["grid"]["bbox"]),  # type: ignore[arg-type]
+    )

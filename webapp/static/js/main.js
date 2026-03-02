@@ -248,7 +248,9 @@ function renderDetailPanel(agentId) {
   const a = sched.agent;
   let html = `<div class="detail-header">${a.name}</div>`;
   html += `<div class="detail-meta">Age ${a.age}`;
-  html += ` &middot; ${a.employment}</div>`;
+  html += ` &middot; ${a.employment}`;
+  if (a.home_name) html += ` &middot; ${a.home_name}`;
+  html += `</div>`;
   html += `<div class="detail-persona">${a.persona}</div>`;
 
   // Build chronological timeline
@@ -265,7 +267,7 @@ function renderDetailPanel(agentId) {
     events.push({
       time: trip.departure,
       end: trip.arrival,
-      label: `${trip.origin} → ${trip.destination}`,
+      label: `${trip.origin_name || trip.origin} → ${trip.destination_name || trip.destination}`,
       kind: "trip",
       mode: trip.mode,
     });
