@@ -59,24 +59,6 @@ def _node_lookup(nodes_path: Path) -> dict[int, list[float]]:
 # ── exports ──────────────────────────────────────────
 
 
-def export_network(edges_path: Path, out_path: Path) -> None:
-    """Write simplified network.geojson from car edges parquet."""
-    gdf = gpd.read_parquet(edges_path)
-
-    # Keep only geometry — drop all attribute columns
-    gdf = gdf[["geometry"]].copy()
-
-    # Simplify geometries to reduce file size (~1m tolerance)
-    gdf["geometry"] = gdf["geometry"].simplify(0.00001)
-
-    # Drop empty geometries
-    gdf = gdf[~gdf.geometry.is_empty]
-
-    gdf.to_file(out_path, driver="GeoJSON")
-    size_mb = out_path.stat().st_size / 1_048_576
-    print(f"Wrote {len(gdf)} edges to {out_path} ({size_mb:.1f} MB)")
-
-
 def _add_travel_time_car(
     graph: nx.MultiDiGraph,
     highway_speeds: dict[str, float],
@@ -345,11 +327,7 @@ def main() -> None:
     with open(OUT_DIR / "zone_lookup.json", "w") as f:
         json.dump(zone_lut, f)
 
-    # 4. Network GeoJSON
-    edges_path = data_dir / f"{name}_network_car_edges.parquet"
-    export_network(edges_path, OUT_DIR / "network.geojson")
-
-    # 5. Load graphs with travel time weights (for trip arrival)
+    # 4. Load graphs with travel time weights (for trip arrival)
     net_cfg = cfg["network"]
     highway_speeds = {k: float(v) for k, v in net_cfg["highway_speeds"].items()}
     mode_graphs: dict[str, nx.MultiDiGraph] = {}
