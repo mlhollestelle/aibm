@@ -277,12 +277,6 @@ function onAgentHover(info) {
 // ── Click → detail panel ───────────────────────────
 
 function onAgentClick(info) {
-  if (!info.object) {
-    selectedAgentId = null;
-    document.getElementById("mode-bubble").classList.add("hidden");
-    rebuildLayers();
-    return;
-  }
   selectedAgentId = info.object.agent.id;
   rebuildLayers();
   const sched = agentSchedules[selectedAgentId];
@@ -420,6 +414,13 @@ function init() {
     initialViewState: INITIAL_VIEW,
     controller: true,
     layers: [],
+    onClick: (info) => {
+      if (!info.object) {
+        selectedAgentId = null;
+        document.getElementById("mode-bubble").classList.add("hidden");
+        rebuildLayers();
+      }
+    },
   });
   loadData();
 }
