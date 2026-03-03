@@ -304,18 +304,13 @@ function modeColorHex(mode) {
 
 // ── Layer building ──────────────────────────────────
 
-function selectedRoute() {
-  if (!selectedAgentId) return null;
+function selectedRoutes() {
+  if (!selectedAgentId) return [];
   const sched = agentSchedules[selectedAgentId];
-  if (!sched) return null;
-  // Find the trip the agent is currently on
-  for (const trip of sched.trips) {
-    if (currentTime >= trip.departure
-        && currentTime < trip.arrival) {
-      return trip.route;
-    }
-  }
-  return null;
+  if (!sched) return [];
+  return sched.trips.filter(
+    (trip) => trip.route && trip.route.length > 1
+  );
 }
 
 function rebuildLayers() {
@@ -326,9 +321,9 @@ function rebuildLayers() {
       agentPositions, onAgentHover, onAgentClick
     ),
   ];
-  const route = selectedRoute();
-  if (route) {
-    layers.push(createRouteLayer(route));
+  const routes = selectedRoutes();
+  if (routes.length > 0) {
+    layers.push(createRouteLayer(routes));
   }
   deckInstance.setProps({ layers });
 }
