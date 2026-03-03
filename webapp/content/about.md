@@ -4,6 +4,8 @@ AIBM is an experimental agent-based travel demand model that uses large
 language models instead of statistical utility functions to simulate daily
 travel behaviour.
 
+Disclaimer: This project has been developed while I had limited ability to use a computer keyboard, and nearly all code is written by AI. The code contains shortcuts/limitations that I would not have chosen myself. The purpose of this project is mainly a proof-of-concept, not an ideal implementation.
+
 ## How it works
 
 ...
@@ -53,6 +55,17 @@ Lesson's learned:
     > When agent is planning its day, you can choose first the main activity, and then you can ask: do you want to do something more, or do you want to go home? etc... You can also just batch ask: schedule these activities (but may violate what is actually possible in reality).
 * Mimicking human thinking in the prompt can lead to more accurate answers (then simply prompting e.g., "generate three activities").
 * Under the hood, the code uses minutes-from-midnight floats, but that does not work well in prompts (https://github.com/mlhollestelle/aibm/pull/37/changes/c52888fe4cb8d532656905db57ea864618b4d2c1).
+* LLMs are inconsistent in the format they return, by mixing upper/lower case or switching between underscore and space:
+
+```
+  shopping              15:10  15:45       yes  E0274N3875
+  Shopping              17:30  19:00        no  E0240N3988
+  Eating Out            19:30  21:00        no  E0310N3903
+  eating_out      
+```
+
+
+(Or simply changed eating_out to dining_out)
 
 Recommendations for further research:
 * There is probably a lot improvement possible, simply by improving the prompts, making them more comprehensive and use reasoning models.

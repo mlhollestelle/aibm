@@ -7,6 +7,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from aibm.activity import normalize_activity_type
 from aibm.agent import Agent, _fmt_mins, _parse_hhmm
 
 if TYPE_CHECKING:
@@ -608,7 +609,7 @@ class Household:
                     location = zone_id
 
             act = Act(
-                type=item["activity_type"],
+                type=normalize_activity_type(item["activity_type"]),
                 location=location,
                 poi_id=poi_id,
                 start_time=_parse_hhmm(item["start_time"]),

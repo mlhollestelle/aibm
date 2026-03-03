@@ -9,7 +9,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from aibm.activity import VALID_OUT_OF_HOME_TYPES, Activity
+from aibm.activity import VALID_OUT_OF_HOME_TYPES, Activity, normalize_activity_type
 from aibm.day_plan import DayPlan, TimeWindow
 from aibm.llm import LLMClient, create_client
 from aibm.poi import POI
@@ -464,7 +464,7 @@ class Agent:
 
         activities: list[Activity] = []
         for item in data["activities"]:
-            act_type = item["type"].lower().strip()
+            act_type = normalize_activity_type(item["type"])
 
             # Skip work/school if agent has no zone assigned
             if act_type == "work" and self.work_zone is None:
@@ -1002,7 +1002,7 @@ class Agent:
         type_cursors: dict[str, int] = {t: 0 for t in pending}
 
         for item in data["planned_activities"]:
-            act_type: str = item["type"]
+            act_type = normalize_activity_type(item["type"])
             acts = pending.get(act_type, [])
             cursor = type_cursors.get(act_type, 0)
             if cursor >= len(acts):
