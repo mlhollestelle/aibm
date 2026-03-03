@@ -110,7 +110,7 @@ def _reconstruct_household(hh_id: int, group: pd.DataFrame, model: str) -> House
     return hh
 
 
-def _nearest_zones(
+def _sample_zones(
     home_zone: str | None,
     all_zones: list[Zone],
     skims: list[Skim],
@@ -215,14 +215,14 @@ def _build_agent_plan(
 
     prompt_zone: str | None = None
     if agent.employment == "employed":
-        candidates, travel_times = _nearest_zones(
+        candidates, travel_times = _sample_zones(
             agent.home_zone, all_zones, skims, n_zone_candidates, work_counts
         )
         if candidates:
             _, prompt_zone = agent.choose_work_zone(candidates, travel_times, client)
 
     if agent.employment == "student":
-        candidates, travel_times = _nearest_zones(
+        candidates, travel_times = _sample_zones(
             agent.home_zone, all_zones, skims, n_zone_candidates, school_counts
         )
         if candidates:
