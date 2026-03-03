@@ -55,19 +55,23 @@ function createAgentLayer(positions, onHover, onClick) {
 }
 
 /**
- * Create a PathLayer highlighting the selected agent's
- * current route.
- * @param {Array} route - [[lon, lat], ...]
+ * Create a PathLayer highlighting all of the selected agent's
+ * daily routes, colored by transport mode.
+ * @param {Array} trips - trip objects with .route and .mode
  */
-function createRouteLayer(route) {
+function createRouteLayer(trips) {
   return new deck.PathLayer({
     id: "selected-route",
-    data: [{ path: route }],
-    getPath: (d) => d.path,
-    getColor: [45, 114, 210, 200],
+    data: trips,
+    getPath: (d) => d.route,
+    getColor: (d) => {
+      const c = MODE_COLORS[d.mode] ?? MODE_COLORS.car;
+      return [c[0], c[1], c[2], 200];
+    },
     getWidth: 4,
     widthMinPixels: 3,
     widthMaxPixels: 6,
     pickable: false,
+    updateTriggers: { getColor: trips },
   });
 }
