@@ -274,7 +274,7 @@ class Agent:
         travel_times: dict[str, dict[str, float]],
         client: LLMClient | None = None,
         overwrite: bool = False,
-    ) -> tuple[str, str]:
+    ) -> tuple[str, str, str]:
         """Ask the LLM to pick a work zone for this agent.
 
         If a work zone is already set the LLM call is skipped and
@@ -288,8 +288,9 @@ class Agent:
                 already set.
 
         Returns:
-            Tuple of (chosen zone id, prompt string). The prompt
-            is empty when the cached value is returned.
+            Tuple of (chosen zone id, reasoning, prompt string).
+            Reasoning and prompt are empty when the cached value
+            is returned.
 
         Raises:
             ValueError: If not employed or zones is empty.
@@ -297,7 +298,7 @@ class Agent:
         if self.employment != "employed":
             raise ValueError("choose_work_zone only applies to employed agents")
         if self.work_zone is not None and not overwrite:
-            return self.work_zone, ""
+            return self.work_zone, "", ""
         return self._choose_long_term_zone(zones, travel_times, "work", client)
 
     def choose_school_zone(
@@ -306,7 +307,7 @@ class Agent:
         travel_times: dict[str, dict[str, float]],
         client: LLMClient | None = None,
         overwrite: bool = False,
-    ) -> tuple[str, str]:
+    ) -> tuple[str, str, str]:
         """Ask the LLM to pick a school zone for this agent.
 
         If a school zone is already set the LLM call is skipped
@@ -321,8 +322,9 @@ class Agent:
                 already set.
 
         Returns:
-            Tuple of (chosen zone id, prompt string). The prompt
-            is empty when the cached value is returned.
+            Tuple of (chosen zone id, reasoning, prompt string).
+            Reasoning and prompt are empty when the cached value
+            is returned.
 
         Raises:
             ValueError: If not a student or zones is empty.
@@ -330,7 +332,7 @@ class Agent:
         if self.employment != "student":
             raise ValueError("choose_school_zone only applies to student agents")
         if self.school_zone is not None and not overwrite:
-            return self.school_zone, ""
+            return self.school_zone, "", ""
         return self._choose_long_term_zone(zones, travel_times, "school", client)
 
     def _choose_long_term_zone(
@@ -339,7 +341,7 @@ class Agent:
         travel_times: dict[str, dict[str, float]],
         purpose: str,
         client: LLMClient | None = None,
-    ) -> tuple[str, str]:
+    ) -> tuple[str, str, str]:
         """Shared logic for choosing a work or school zone."""
         if not zones:
             raise ValueError("zones must contain at least one Zone")
@@ -384,12 +386,13 @@ class Agent:
 
         data = json.loads(text)
         chosen_id: str = data["zone_id"]
+        reasoning: str = data.get("reasoning", "")
 
         if purpose == "work":
             self.work_zone = chosen_id
         else:
             self.school_zone = chosen_id
-        return chosen_id, prompt
+        return chosen_id, reasoning, prompt
 
     def generate_activities(
         self,
