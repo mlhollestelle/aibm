@@ -10,6 +10,7 @@ Usage:
 
 import logging
 import math
+import random
 import re
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -116,13 +117,14 @@ def _nearest_zones(
     n: int,
     poi_counts: dict[str, int] | None = None,
 ) -> tuple[list[Zone], dict[str, dict[str, float]]]:
-    """Return the n nearest reachable zones and their travel times.
+    """Return a random sample of reachable zones and their travel times.
 
     When *poi_counts* is provided, only zones that contain at least one
     relevant POI are considered. Each returned zone's ``poi_count``
     attribute is stamped with the count from *poi_counts*.
 
-    Zones are ranked by the minimum travel time across all modes.
+    Candidates are drawn uniformly at random from all reachable eligible
+    zones, so the LLM is not mechanically biased toward nearby destinations.
 
     Args:
         home_zone: Origin zone id.
@@ -145,17 +147,16 @@ def _nearest_zones(
         else all_zones
     )
 
-    ranked: list[tuple[float, Zone]] = []
+    reachable: list[Zone] = []
     for z in eligible:
         min_tt = min(
             (sk.travel_time(home_zone, z.id) for sk in skims),
             default=math.inf,
         )
         if min_tt < math.inf:
-            ranked.append((min_tt, z))
+            reachable.append(z)
 
-    ranked.sort(key=lambda t: t[0])
-    candidates = [z for _, z in ranked[:n]]
+    candidates = random.sample(reachable, min(n, len(reachable)))
 
     if poi_counts is not None:
         for z in candidates:
