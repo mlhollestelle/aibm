@@ -8,7 +8,7 @@ const MODE_COLORS = {
   walk: [205, 66, 70],    // red
 };
 const ACTIVITY_COLOR = [115, 128, 145]; // grey
-const HOME_COLOR = [64, 72, 84];        // dark grey
+const HOME_COLOR = [140, 150, 165];     // light steel-blue-grey
 
 /**
  * Create the static network GeoJsonLayer.
