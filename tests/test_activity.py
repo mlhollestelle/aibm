@@ -1,4 +1,4 @@
-from aibm.activity import Activity
+from aibm.activity import Activity, normalize_activity_type
 
 
 def test_activity_has_type() -> None:
@@ -21,6 +21,13 @@ def test_activity_is_flexible_by_default() -> None:
 def test_activity_poi_id_defaults_to_none() -> None:
     act = Activity(type="shopping")
     assert act.poi_id is None
+
+
+def test_normalize_activity_type() -> None:
+    assert normalize_activity_type("Eating_out") == "eating_out"
+    assert normalize_activity_type("eating out") == "eating_out"
+    assert normalize_activity_type("  Work  ") == "work"
+    assert normalize_activity_type("Personal_Business") == "personal_business"
 
 
 def test_activity_with_all_fields() -> None:

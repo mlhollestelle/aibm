@@ -17,6 +17,11 @@ VALID_OUT_OF_HOME_TYPES: frozenset[str] = frozenset(
 )
 
 
+def normalize_activity_type(raw: str) -> str:
+    """Normalize an LLM-returned activity type to snake_case lowercase."""
+    return raw.strip().lower().replace(" ", "_")
+
+
 @dataclass
 class Activity:
     """A single activity performed by an agent.
