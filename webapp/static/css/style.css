@@ -269,6 +269,34 @@ html, body {
   color: var(--text-secondary);
 }
 
+/* ── Mode-choice speech bubble ───────────────────── */
+#mode-bubble {
+  position: absolute;
+  z-index: 25;
+  pointer-events: none;
+  background: var(--overlay-bg);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 10px 14px;
+  max-width: 270px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-primary);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  transform: translateX(-50%) translateY(calc(-100% - 14px));
+}
+/* downward tail */
+#mode-bubble::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 8px solid transparent;
+  border-top-color: var(--overlay-bg);
+}
+#mode-bubble.hidden { display: none; }
+
 /* ── Agent detail panel ──────────────────────────── */
 #detail-area {
   margin-top: 12px;

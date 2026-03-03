@@ -258,6 +258,12 @@ def export_trips(
                     str(row["destination_buurt"]) if has_buurt else destination
                 ),
                 "mode": mode,
+                "mode_reasoning": (
+                    str(row["mode_reasoning"])
+                    if "mode_reasoning" in df.columns
+                    and pd.notna(row["mode_reasoning"])
+                    else None
+                ),
                 "departure": departure,
                 "arrival": round(arrival, 1),
                 "distance_km": distance_km,
