@@ -143,6 +143,7 @@ function agentStateAt(sched, time) {
         radius: 50,
         status: "travelling",
         mode: trip.mode,
+        mode_reasoning: trip.mode_reasoning || null,
         agent: agent,
       };
     }
@@ -181,6 +182,46 @@ function agentStateAt(sched, time) {
 }
 
 /**
+ * Return the most relevant mode_reasoning string for a selected agent.
+ */
+function _currentReasoning(sched, time) {
+  const trips = sched.trips;
+  // 1. Currently travelling
+  for (const t of trips) {
+    if (time >= t.departure && time < t.arrival)
+      return t.mode_reasoning || null;
+  }
+  // 2. Next upcoming trip
+  for (const t of [...trips].sort((a, b) => a.departure - b.departure)) {
+    if (t.departure > time)
+      return t.mode_reasoning || null;
+  }
+  // 3. Most recently completed trip
+  const past = trips.filter(t => t.arrival <= time);
+  if (past.length)
+    return past[past.length - 1].mode_reasoning || null;
+  return null;
+}
+
+/**
+ * Show, move or hide the speech bubble above a map position.
+ */
+function updateBubble(lon, lat, reasoning) {
+  const el = document.getElementById("mode-bubble");
+  if (!reasoning || !deckInstance) {
+    el.classList.add("hidden");
+    return;
+  }
+  const vp = deckInstance.getViewports()[0];
+  if (!vp) { el.classList.add("hidden"); return; }
+  const [x, y] = vp.project([lon, lat]);
+  el.style.left = x + "px";
+  el.style.top  = y + "px";
+  el.querySelector(".bubble-content").textContent = reasoning;
+  el.classList.remove("hidden");
+}
+
+/**
  * Compute all agent positions for a given simulation time.
  */
 function updatePositions(time) {
@@ -189,6 +230,12 @@ function updatePositions(time) {
     agentPositions.push(agentStateAt(agentSchedules[id], time));
   }
   if (selectedAgentId) {
+    const sched = agentSchedules[selectedAgentId];
+    if (sched) {
+      const state = agentStateAt(sched, time);
+      const reasoning = _currentReasoning(sched, time);
+      updateBubble(state.lon, state.lat, reasoning);
+    }
     renderDetailPanel(selectedAgentId);
   }
   rebuildLayers();
@@ -231,10 +278,21 @@ function onAgentHover(info) {
 // ── Click → detail panel ───────────────────────────
 
 function onAgentClick(info) {
-  if (!info.object) return;
+  if (!info.object) {
+    selectedAgentId = null;
+    document.getElementById("mode-bubble").classList.add("hidden");
+    rebuildLayers();
+    return;
+  }
   selectedAgentId = info.object.agent.id;
-  renderDetailPanel(selectedAgentId);
   rebuildLayers();
+  const sched = agentSchedules[selectedAgentId];
+  if (sched) {
+    const state = agentStateAt(sched, currentTime);
+    const reasoning = _currentReasoning(sched, currentTime);
+    updateBubble(state.lon, state.lat, reasoning);
+  }
+  renderDetailPanel(selectedAgentId);
 }
 
 function renderDetailPanel(agentId) {
