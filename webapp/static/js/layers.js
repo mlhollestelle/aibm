@@ -11,22 +11,6 @@ const ACTIVITY_COLOR = [115, 128, 145]; // grey
 const HOME_COLOR = [140, 150, 165];     // light steel-blue-grey
 
 /**
- * Create the static network GeoJsonLayer.
- */
-function createNetworkLayer(data) {
-  return new deck.GeoJsonLayer({
-    id: "network",
-    data: data,
-    stroked: true,
-    filled: false,
-    lineWidthMinPixels: 1,
-    getLineColor: [160, 160, 160, 120],
-    getLineWidth: 1,
-    pickable: false,
-  });
-}
-
-/**
  * Create the animated agent ScatterplotLayer.
  * @param {Array} positions - [{lon, lat, r, g, b, radius, agent}]
  * @param {Function} onHover - hover callback

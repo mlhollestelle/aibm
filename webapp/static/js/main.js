@@ -9,7 +9,6 @@ const INITIAL_VIEW = {
 };
 
 let deckInstance = null;
-let networkData = null;
 
 // Per-agent schedule: { agentId: { agent, trips, activities } }
 let agentSchedules = {};
@@ -374,7 +373,6 @@ function selectedRoutes() {
 function rebuildLayers() {
   if (!deckInstance) return;
   const layers = [
-    createNetworkLayer(networkData),
     createAgentLayer(
       agentPositions, onAgentHover, onAgentClick
     ),
@@ -389,21 +387,18 @@ function rebuildLayers() {
 // ── Init ────────────────────────────────────────────
 
 async function loadData() {
-  const [network, agents, trips, activities] = await Promise.all([
-    loadJSON("data/network.geojson"),
+  const [agents, trips, activities] = await Promise.all([
     loadJSON("data/agents.json"),
     loadJSON("data/trips.json"),
     loadJSON("data/activities.json"),
   ]);
 
-  networkData = network;
   const agentsArr = agents || [];
   const tripsArr = trips || [];
   const activitiesArr = activities || [];
 
   console.log(
-    `Loaded: ${networkData ? networkData.features.length : 0} edges,`,
-    `${agentsArr.length} agents,`,
+    `Loaded: ${agentsArr.length} agents,`,
     `${tripsArr.length} trips,`,
     `${activitiesArr.length} activities`
   );
