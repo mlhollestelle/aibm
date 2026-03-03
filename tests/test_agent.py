@@ -950,6 +950,29 @@ def test_build_tours_tour_is_closed() -> None:
     assert all(t.is_closed for t in result.tours)
 
 
+def test_build_tours_first_departure_accounts_for_travel_time() -> None:
+    """First trip departs early enough to arrive at the first activity on time."""
+    mock_skim = MagicMock(spec=Skim)
+    mock_skim.travel_time.return_value = 30.0  # 30 min home → work
+
+    agent = Agent(name="Grace", age=40, employment="employed", home_zone="h")
+    plan = DayPlan(
+        activities=[
+            Activity(
+                type="work",
+                location="w",
+                start_time=480,  # 08:00
+                end_time=1020,
+            ),
+        ]
+    )
+    result = agent.build_tours(plan, skims=[mock_skim])
+    first_trip = result.tours[0].trips[0]
+    assert first_trip.departure_time == 480 - 30  # leaves at 07:30
+    # Activity itself is unchanged
+    assert result.activities[0].start_time == 480
+
+
 def test_schedule_activities_travel_times_in_prompt() -> None:
     """Travel times appear in the prompt when skims and locations are set."""
     agent = Agent(name="Alice", age=30, employment="employed")
