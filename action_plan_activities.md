@@ -5,7 +5,7 @@
 ### 1.1 Long-term zone choice (work / school)
 
 **Code:** `Agent._choose_long_term_zone` / `Agent.choose_work_zone` / `Agent.choose_school_zone`
-**Triggered by:** `_nearest_zones` helper in `simulate.py`
+**Triggered by:** `_sample_zones` helper in `simulate.py`
 
 1. Rank all zones by the minimum travel time across all modes from the agent's
    home zone.
@@ -266,7 +266,7 @@ L12.
 
 ### Plan D — Enrich long-term zone choice  *(fixes L1–L5)*
 
-**Where:** `simulate.py::_nearest_zones` + `Zone` dataclass + zone-building
+**Where:** `simulate.py::_sample_zones` + `Zone` dataclass + zone-building
 logic.
 
 **What changes:**
@@ -293,7 +293,7 @@ logic.
    it is surfaced in the notebook output (L5).
 
 **Status: implemented** (`poi_count: int = 0` added to `Zone`; `_zones_from_specs`
-uses `buurt_name` column when present; new `_zone_poi_counts` helper; `_nearest_zones`
+uses `buurt_name` column when present; new `_zone_poi_counts` helper; `_sample_zones`
 filters to POI-containing zones and stamps `poi_count`; `_choose_long_term_zone` prompt
 updated to show buurt labels and POI counts; threaded through `_simulate_household` and
 `simulate()`).
