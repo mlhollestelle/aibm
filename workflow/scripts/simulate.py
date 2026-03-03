@@ -219,14 +219,18 @@ def _build_agent_plan(
             agent.home_zone, all_zones, skims, n_zone_candidates, work_counts
         )
         if candidates:
-            _, prompt_zone = agent.choose_work_zone(candidates, travel_times, client)
+            _, _r, prompt_zone = agent.choose_work_zone(
+                candidates, travel_times, client
+            )
 
     if agent.employment == "student":
         candidates, travel_times = _sample_zones(
             agent.home_zone, all_zones, skims, n_zone_candidates, school_counts
         )
         if candidates:
-            _, prompt_zone = agent.choose_school_zone(candidates, travel_times, client)
+            _, _r, prompt_zone = agent.choose_school_zone(
+                candidates, travel_times, client
+            )
 
     activities, prompt_activities = agent.generate_activities(client)
 

@@ -320,9 +320,12 @@ TRAVEL_TIMES = {
 def test_choose_work_zone_sets_work_zone() -> None:
     agent = Agent(name="Alice", age=30, employment="employed")
     mock = _mock_zone_client("zone_a")
-    zone_id, prompt = agent.choose_work_zone(ZONES, TRAVEL_TIMES, client=mock)
+    zone_id, reasoning, prompt = agent.choose_work_zone(
+        ZONES, TRAVEL_TIMES, client=mock
+    )
     assert zone_id == "zone_a"
     assert agent.work_zone == "zone_a"
+    assert reasoning == "Good commute."
     assert isinstance(prompt, str)
     assert len(prompt) > 0
 
@@ -351,9 +354,12 @@ def test_choose_work_zone_prompt_includes_travel_times() -> None:
 def test_choose_school_zone_sets_school_zone() -> None:
     agent = Agent(name="Eve", age=16, employment="student")
     mock = _mock_zone_client("zone_b")
-    zone_id, prompt = agent.choose_school_zone(ZONES, TRAVEL_TIMES, client=mock)
+    zone_id, reasoning, prompt = agent.choose_school_zone(
+        ZONES, TRAVEL_TIMES, client=mock
+    )
     assert zone_id == "zone_b"
     assert agent.school_zone == "zone_b"
+    assert reasoning == "Good commute."
     assert isinstance(prompt, str)
     assert len(prompt) > 0
 
@@ -367,8 +373,11 @@ def test_choose_school_zone_raises_for_non_student() -> None:
 def test_choose_work_zone_skips_when_already_set() -> None:
     agent = Agent(name="Grace", age=30, employment="employed", work_zone="zone_x")
     mock = MagicMock()
-    zone_id, prompt = agent.choose_work_zone(ZONES, TRAVEL_TIMES, client=mock)
+    zone_id, reasoning, prompt = agent.choose_work_zone(
+        ZONES, TRAVEL_TIMES, client=mock
+    )
     assert zone_id == "zone_x"
+    assert reasoning == ""
     assert prompt == ""
     mock.generate_json.assert_not_called()
 
@@ -376,11 +385,12 @@ def test_choose_work_zone_skips_when_already_set() -> None:
 def test_choose_work_zone_overwrites_when_requested() -> None:
     agent = Agent(name="Grace", age=30, employment="employed", work_zone="zone_x")
     mock = _mock_zone_client("zone_a")
-    zone_id, prompt = agent.choose_work_zone(
+    zone_id, reasoning, prompt = agent.choose_work_zone(
         ZONES, TRAVEL_TIMES, client=mock, overwrite=True
     )
     assert zone_id == "zone_a"
     assert agent.work_zone == "zone_a"
+    assert len(reasoning) > 0
     assert len(prompt) > 0
     mock.generate_json.assert_called_once()
 
@@ -388,8 +398,11 @@ def test_choose_work_zone_overwrites_when_requested() -> None:
 def test_choose_school_zone_skips_when_already_set() -> None:
     agent = Agent(name="Heidi", age=16, employment="student", school_zone="zone_y")
     mock = MagicMock()
-    zone_id, prompt = agent.choose_school_zone(ZONES, TRAVEL_TIMES, client=mock)
+    zone_id, reasoning, prompt = agent.choose_school_zone(
+        ZONES, TRAVEL_TIMES, client=mock
+    )
     assert zone_id == "zone_y"
+    assert reasoning == ""
     assert prompt == ""
     mock.generate_json.assert_not_called()
 
@@ -397,11 +410,12 @@ def test_choose_school_zone_skips_when_already_set() -> None:
 def test_choose_school_zone_overwrites_when_requested() -> None:
     agent = Agent(name="Heidi", age=16, employment="student", school_zone="zone_y")
     mock = _mock_zone_client("zone_b")
-    zone_id, prompt = agent.choose_school_zone(
+    zone_id, reasoning, prompt = agent.choose_school_zone(
         ZONES, TRAVEL_TIMES, client=mock, overwrite=True
     )
     assert zone_id == "zone_b"
     assert agent.school_zone == "zone_b"
+    assert len(reasoning) > 0
     assert len(prompt) > 0
     mock.generate_json.assert_called_once()
 
