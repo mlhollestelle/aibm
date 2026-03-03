@@ -13,6 +13,11 @@ from aibm.activity import VALID_OUT_OF_HOME_TYPES, Activity, normalize_activity_
 from aibm.day_plan import DayPlan, TimeWindow, _min_travel
 from aibm.llm import LLMClient, create_client
 from aibm.poi import POI
+from aibm.prompts import (
+    PromptConfig,
+    StepPrompt,
+    build_prompt,
+)
 from aibm.sampling import sample_destinations
 from aibm.skim import Skim
 from aibm.tour import Tour
@@ -151,6 +156,7 @@ class Agent:
         client: LLMClient | None = None,
         household: Household | None = None,
         overwrite: bool = False,
+        step: StepPrompt | None = None,
     ) -> tuple[str, str]:
         """Ask the LLM to create a short behavioural persona.
 
@@ -168,6 +174,8 @@ class Agent:
             household: Optional household for richer context.
             overwrite: Re-generate even when a persona already
                 exists.
+            step: Configurable prompt sections. Falls back to
+                built-in defaults when *None*.
 
         Returns:
             Tuple of (persona string, prompt string). The prompt
@@ -179,15 +187,14 @@ class Agent:
         if client is None:
             client = create_client(self.model)
 
+        if step is None:
+            step = PromptConfig().persona
+
         background = self._build_background(household)
-        prompt = (
-            f"You are creating a behavioural profile for "
-            f"{self.name}.\n"
-            f"Demographics:\n{background}\n\n"
-            "Write a 1-2 sentence persona describing this "
-            "person's travel habits, preferences, and daily "
-            "routine. Be specific and grounded in the "
-            "demographics above."
+        prompt = build_prompt(
+            step,
+            {"agent_name": self.name},
+            background,
         )
 
         text = client.generate_json(
@@ -211,6 +218,7 @@ class Agent:
         options: list[ModeOption],
         client: LLMClient | None = None,
         household: Household | None = None,
+        step: StepPrompt | None = None,
     ) -> tuple[ModeChoice, str]:
         """Ask the LLM to pick a travel mode and explain why.
 
@@ -220,6 +228,8 @@ class Agent:
                 one is created automatically based on ``self.model``.
             household: Optional household that supplies vehicle
                 count and income level for richer decision context.
+            step: Configurable prompt sections. Falls back to
+                built-in defaults when *None*.
 
         Returns:
             Tuple of (ModeChoice with selected option and reasoning,
@@ -234,20 +244,18 @@ class Agent:
         if client is None:
             client = create_client(self.model)
 
+        if step is None:
+            step = PromptConfig().mode_choice
+
         background = self._build_background(household)
         options_text = "\n".join(
             f"- {opt.mode}: {opt.travel_time} minutes" for opt in options
         )
-        prompt = (
-            f"You are {self.name}, deciding how to travel "
-            "today.\n"
-            f"Background:\n{background}\n\n"
-            f"Available options:\n{options_text}\n\n"
-            "Pick exactly one mode. Respond with:\n"
-            '- "reasoning": a short personal story '
-            "(2-3 sentences) explaining your choice.\n"
-            '- "choice": the mode name exactly as listed '
-            "above."
+        data_block = f"{background}\n\nAvailable options:\n{options_text}"
+        prompt = build_prompt(
+            step,
+            {"agent_name": self.name},
+            data_block,
         )
 
         text = client.generate_json(
@@ -274,6 +282,7 @@ class Agent:
         travel_times: dict[str, dict[str, float]],
         client: LLMClient | None = None,
         overwrite: bool = False,
+        step: StepPrompt | None = None,
     ) -> tuple[str, str, str]:
         """Ask the LLM to pick a work zone for this agent.
 
@@ -286,6 +295,8 @@ class Agent:
             client: An :class:`~aibm.llm.LLMClient`.
             overwrite: Re-generate even when a work zone is
                 already set.
+            step: Configurable prompt sections. Falls back to
+                built-in defaults when *None*.
 
         Returns:
             Tuple of (chosen zone id, reasoning, prompt string).
@@ -299,7 +310,9 @@ class Agent:
             raise ValueError("choose_work_zone only applies to employed agents")
         if self.work_zone is not None and not overwrite:
             return self.work_zone, "", ""
-        return self._choose_long_term_zone(zones, travel_times, "work", client)
+        return self._choose_long_term_zone(
+            zones, travel_times, "work", client, step=step
+        )
 
     def choose_school_zone(
         self,
@@ -307,6 +320,7 @@ class Agent:
         travel_times: dict[str, dict[str, float]],
         client: LLMClient | None = None,
         overwrite: bool = False,
+        step: StepPrompt | None = None,
     ) -> tuple[str, str, str]:
         """Ask the LLM to pick a school zone for this agent.
 
@@ -320,6 +334,8 @@ class Agent:
             client: An :class:`~aibm.llm.LLMClient`.
             overwrite: Re-generate even when a school zone is
                 already set.
+            step: Configurable prompt sections. Falls back to
+                built-in defaults when *None*.
 
         Returns:
             Tuple of (chosen zone id, reasoning, prompt string).
@@ -333,7 +349,9 @@ class Agent:
             raise ValueError("choose_school_zone only applies to student agents")
         if self.school_zone is not None and not overwrite:
             return self.school_zone, "", ""
-        return self._choose_long_term_zone(zones, travel_times, "school", client)
+        return self._choose_long_term_zone(
+            zones, travel_times, "school", client, step=step
+        )
 
     def _choose_long_term_zone(
         self,
@@ -341,6 +359,7 @@ class Agent:
         travel_times: dict[str, dict[str, float]],
         purpose: str,
         client: LLMClient | None = None,
+        step: StepPrompt | None = None,
     ) -> tuple[str, str, str]:
         """Shared logic for choosing a work or school zone."""
         if not zones:
@@ -348,6 +367,9 @@ class Agent:
 
         if client is None:
             client = create_client(self.model)
+
+        if step is None:
+            step = PromptConfig().zone_choice
 
         background = self._build_background()
         zones_text_parts: list[str] = []
@@ -361,14 +383,15 @@ class Agent:
             + ", ".join(f"{mode} {mins:.0f} min" for mode, mins in modes.items())
             for zid, modes in travel_times.items()
         )
-        prompt = (
-            f"You are {self.name}, choosing a {purpose} "
-            "location.\n"
-            f"Background:\n{background}\n\n"
+        data_block = (
+            f"{background}\n\n"
             f"Candidate zones:\n{zones_text}\n\n"
-            f"Travel times from home:\n{travel_text}\n\n"
-            f"Pick exactly one zone id for your {purpose}. "
-            "Respond with the zone id and your reasoning."
+            f"Travel times from home:\n{travel_text}"
+        )
+        prompt = build_prompt(
+            step,
+            {"agent_name": self.name, "purpose": purpose},
+            data_block,
         )
 
         text = client.generate_json(
@@ -397,6 +420,7 @@ class Agent:
     def generate_activities(
         self,
         client: LLMClient | None = None,
+        step: StepPrompt | None = None,
     ) -> tuple[list[Activity], str]:
         """Ask the LLM to generate today's activity list.
 
@@ -406,6 +430,8 @@ class Agent:
 
         Args:
             client: An :class:`~aibm.llm.LLMClient`.
+            step: Configurable prompt sections. Falls back to
+                built-in defaults when *None*.
 
         Returns:
             Tuple of (list of Activity objects, prompt string).
@@ -413,21 +439,16 @@ class Agent:
         if client is None:
             client = create_client(self.model)
 
+        if step is None:
+            step = PromptConfig().activities
+
         background = self._build_background()
         valid_types = sorted(VALID_OUT_OF_HOME_TYPES)
         types_list = ", ".join(valid_types)
-        prompt = (
-            f"You are {self.name}, planning your day.\n"
-            f"Background:\n{background}\n\n"
-            "Only include out-of-home activities. "
-            "Include mandatory activities: work if you are "
-            "employed, school if you are a student. "
-            "Also include any discretionary activities. "
-            "For each activity specify whether it has a "
-            "flexible time (is_flexible true) or is fixed "
-            "(is_flexible false). Work and school are always "
-            "fixed (is_flexible false).\n"
-            f"Allowed activity types: {types_list}."
+        prompt = build_prompt(
+            step,
+            {"agent_name": self.name, "types_list": types_list},
+            background,
         )
 
         text = client.generate_json(
@@ -496,6 +517,7 @@ class Agent:
         current_zone: str | None = None,
         n_candidates: int = 10,
         rng: random.Random | None = None,
+        step: StepPrompt | None = None,
     ) -> tuple[Activity, str]:
         """Ask the LLM to pick a destination for an activity.
 
@@ -514,6 +536,8 @@ class Agent:
                 Falls back to ``self.home_zone`` when *None*.
             n_candidates: Max candidates to show the LLM.
             rng: Optional seeded RNG for reproducible sampling.
+            step: Configurable prompt sections. Falls back to
+                built-in defaults when *None*.
 
         Returns:
             Tuple of (activity with ``location`` set, prompt string).
@@ -530,6 +554,9 @@ class Agent:
         if client is None:
             client = create_client(self.model)
 
+        if step is None:
+            step = PromptConfig().destination
+
         # Sample candidates down to n_candidates.
         if has_zones:
             assert candidates is not None
@@ -540,7 +567,7 @@ class Agent:
 
         background = self._build_background()
 
-        # --- build the options list shown to the LLM ------
+        # --- build the options list shown to the LLM ---
         options_lines: list[str] = []
         if candidates:
             for z in candidates:
@@ -552,7 +579,7 @@ class Agent:
                 options_lines.append(f"- poi:{p.id}: {label} [{p.activity_type}]")
         options_text = "\n".join(options_lines)
 
-        # --- build travel time block --------------------
+        # --- build travel time block -------------------
         travel_block = ""
         origin = current_zone or self.home_zone
         if skims and origin:
@@ -591,17 +618,17 @@ class Agent:
                 "(minutes from midnight)\n"
             )
 
-        prompt = (
-            f"You are {self.name}, choosing where to do an "
-            "activity.\n"
-            f"Background:\n{background}\n\n"
-            f"Activity type: {activity.type}\n" + time_text + "\n"
-            f"Candidate destinations:\n{options_text}\n"
+        data_block = (
+            f"{background}\n\n"
+            f"Activity type: {activity.type}\n"
+            + time_text
+            + f"\nCandidate destinations:\n{options_text}\n"
             + travel_block
-            + "\nPick exactly one id (including the zone: or "
-            "poi: prefix) from the list above that best fits "
-            "this activity. Respond with the id and your "
-            "reasoning."
+        )
+        prompt = build_prompt(
+            step,
+            {"agent_name": self.name},
+            data_block,
         )
 
         text = client.generate_json(
@@ -642,6 +669,7 @@ class Agent:
         activities: list[Activity],
         client: LLMClient | None = None,
         skims: list[Skim] | None = None,
+        step: StepPrompt | None = None,
     ) -> tuple[DayPlan, str]:
         """Ask the LLM to assign start/end times to activities.
 
@@ -653,6 +681,8 @@ class Agent:
             client: An :class:`~aibm.llm.LLMClient`.
             skims: Optional skim matrices used to include leg
                 travel times in the scheduling prompt.
+            step: Configurable prompt sections. Falls back to
+                built-in defaults when *None*.
 
         Returns:
             Tuple of (DayPlan sorted by start_time, prompt string).
@@ -663,6 +693,9 @@ class Agent:
 
         if client is None:
             client = create_client(self.model)
+
+        if step is None:
+            step = PromptConfig().scheduling
 
         background = self._build_background()
         activities_text = "\n".join(
@@ -684,9 +717,8 @@ class Agent:
                         legs.append(f"- {a.type} → {b.type}: {', '.join(parts)}")
             if legs:
                 travel_text = (
-                    "\nTravel times between consecutive activities:\n"
-                    + "\n".join(legs)
-                    + "\n"
+                    "\nTravel times between consecutive "
+                    "activities:\n" + "\n".join(legs) + "\n"
                 )
 
         seen_types = {a.type for a in activities}
@@ -701,18 +733,16 @@ class Agent:
                 "\nSuggested minimum durations:\n" + "\n".join(dur_lines) + "\n"
             )
 
-        prompt = (
-            f"You are {self.name}, scheduling your day.\n"
-            f"Background:\n{background}\n\n"
+        data_block = (
+            f"{background}\n\n"
             f"Activities to schedule:\n{activities_text}\n"
             f"{travel_text}"
-            f"{duration_text}\n"
-            "Assign a start_time and end_time (as HH:MM strings, "
-            'e.g. "08:00") to each activity. '
-            "Ensure each activity starts at least as late as the previous "
-            "activity's end_time plus the travel time to reach it. "
-            "Fixed activities have realistic fixed hours; flexible ones fill "
-            "the remaining time. Return them in chronological order."
+            f"{duration_text}"
+        )
+        prompt = build_prompt(
+            step,
+            {"agent_name": self.name},
+            data_block,
         )
 
         text = client.generate_json(
@@ -765,6 +795,7 @@ class Agent:
         n_candidates: int = 10,
         rng: random.Random | None = None,
         time_windows: list[TimeWindow] | None = None,
+        step: StepPrompt | None = None,
     ) -> tuple[list[Activity], str]:
         """Plan destination and time for discretionary activities together.
 
@@ -783,6 +814,8 @@ class Agent:
                 is created automatically based on ``self.model``.
             n_candidates: Max POI candidates to show per activity.
             rng: Optional seeded RNG for reproducible sampling.
+            step: Configurable prompt sections. Falls back to
+                built-in defaults when *None*.
 
         Returns:
             Tuple of (discretionary list mutated with location,
@@ -915,35 +948,49 @@ class Agent:
             gap_labels = [lbl for lbl, _ in labeled_gaps]
 
         # --- Prompt ---
+        from aibm.prompts import (
+            DEFAULT_DISCRETIONARY_NOGAPS_INSTRUCTIONS,
+            DEFAULT_DISCRETIONARY_NOGAPS_ROLE,
+        )
+
         if labeled_gaps:
-            prompt = (
-                f"You are {self.name}, planning the rest of your day.\n"
-                f"Background:\n{background}\n"
+            gaps_step = step or PromptConfig().discretionary
+            data_block = (
+                f"{background}\n"
                 f"{timeline_block}"
                 f"{gaps_block}"
                 f"\n{_DISCRETIONARY_EXAMPLE}\n"
                 f"\nNow plan your activities:\n"
                 f"{disc_block}\n"
-                f"{duration_text}\n"
-                "For each activity: choose a destination, specify which gap "
-                "(A, B, …) it fits in, and assign start_time and end_time "
-                'as HH:MM strings (e.g. "17:30") that fall within that gap. '
-                "You must be home by 23:00. "
-                "Return one entry per activity in chronological order."
+                f"{duration_text}"
+            )
+            prompt = build_prompt(
+                gaps_step,
+                {"agent_name": self.name},
+                data_block,
             )
         else:
-            prompt = (
-                f"You are {self.name}, planning your discretionary "
-                "activities for today.\n"
-                f"Background:\n{background}\n"
+            # Use the no-gaps defaults unless the user
+            # provided an explicit override via ``step``.
+            if step is not None:
+                nogaps_step = step
+            else:
+                nogaps_step = StepPrompt(
+                    role=DEFAULT_DISCRETIONARY_NOGAPS_ROLE,
+                    context_framing=(PromptConfig().discretionary.context_framing),
+                    instructions=(DEFAULT_DISCRETIONARY_NOGAPS_INSTRUCTIONS),
+                )
+            data_block = (
+                f"{background}\n"
                 f"{fixed_block}"
-                f"\nDiscretionary activities to plan:{disc_block}\n"
-                f"{duration_text}\n"
-                "For each activity choose a destination and assign "
-                'start_time and end_time as HH:MM strings (e.g. "08:00"). '
-                "The schedule must be feasible: allow travel time between "
-                "activities. "
-                "Return one entry per activity in chronological order."
+                f"\nDiscretionary activities to plan:"
+                f"{disc_block}\n"
+                f"{duration_text}"
+            )
+            prompt = build_prompt(
+                nogaps_step,
+                {"agent_name": self.name},
+                data_block,
             )
 
         # --- Schema (gap field added only when labeled gaps exist) ---
@@ -1125,17 +1172,21 @@ class Agent:
         options: list[ModeOption],
         client: LLMClient | None = None,
         household: Household | None = None,
+        step: StepPrompt | None = None,
     ) -> tuple[ModeChoice, str]:
         """Choose one mode for the entire tour.
 
-        Calls :meth:`choose_mode` once for the first (outbound) trip
-        and applies the chosen mode to every trip in the tour.
+        Calls :meth:`choose_mode` once for the first (outbound)
+        trip and applies the chosen mode to every trip in the
+        tour.
 
         Args:
             tour: The tour to assign a mode to.
             options: Available modes with travel times.
             client: An :class:`~aibm.llm.LLMClient`.
             household: Optional household context.
+            step: Configurable prompt sections. Falls back to
+                built-in defaults when *None*.
 
         Returns:
             Tuple of (ModeChoice for the tour, prompt string).
@@ -1147,7 +1198,12 @@ class Agent:
         if not tour.trips:
             raise ValueError("tour must contain at least one trip")
 
-        choice, prompt = self.choose_mode(options, client=client, household=household)
+        choice, prompt = self.choose_mode(
+            options,
+            client=client,
+            household=household,
+            step=step,
+        )
         for trip in tour.trips:
             trip.mode = choice.option.mode
         return choice, prompt

@@ -38,6 +38,7 @@ from aibm import (
 from aibm.activity import Activity
 from aibm.agent import ModeOption
 from aibm.day_plan import DayPlan, compute_time_windows
+from aibm.prompts import PromptConfig, load_prompt_config
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 log = logging.getLogger(__name__)
@@ -205,34 +206,54 @@ def _build_agent_plan(
     n_zone_candidates: int,
     work_counts: dict[str, int] | None = None,
     school_counts: dict[str, int] | None = None,
+    pc: PromptConfig | None = None,
 ) -> tuple[DayPlan | None, dict, list[dict]]:
     """Build an agent's day plan up to tour construction (no mode choice).
 
     Returns:
         Tuple of (day_plan_or_None, day_plan_row, activity_rows).
     """
-    _, prompt_persona = agent.generate_persona(client, household=hh)
+    if pc is None:
+        pc = PromptConfig()
+
+    _, prompt_persona = agent.generate_persona(client, household=hh, step=pc.persona)
 
     prompt_zone: str | None = None
     if agent.employment == "employed":
         candidates, travel_times = _sample_zones(
-            agent.home_zone, all_zones, skims, n_zone_candidates, work_counts
+            agent.home_zone,
+            all_zones,
+            skims,
+            n_zone_candidates,
+            work_counts,
         )
         if candidates:
             _, _r, prompt_zone = agent.choose_work_zone(
-                candidates, travel_times, client
+                candidates,
+                travel_times,
+                client,
+                step=pc.zone_choice,
             )
 
     if agent.employment == "student":
         candidates, travel_times = _sample_zones(
-            agent.home_zone, all_zones, skims, n_zone_candidates, school_counts
+            agent.home_zone,
+            all_zones,
+            skims,
+            n_zone_candidates,
+            school_counts,
         )
         if candidates:
             _, _r, prompt_zone = agent.choose_school_zone(
-                candidates, travel_times, client
+                candidates,
+                travel_times,
+                client,
+                step=pc.zone_choice,
             )
 
-    activities, prompt_activities = agent.generate_activities(client)
+    activities, prompt_activities = agent.generate_activities(
+        client, step=pc.activities
+    )
 
     mandatory = [a for a in activities if not a.is_flexible]
     discretionary = [a for a in activities if a.is_flexible]
@@ -241,6 +262,7 @@ def _build_agent_plan(
         mandatory,
         client,
         skims=skims,
+        step=pc.scheduling,
     )
 
     time_windows = compute_time_windows(
@@ -266,6 +288,7 @@ def _build_agent_plan(
             skims,
             client=client,
             time_windows=time_windows,
+            step=pc.discretionary,
         )
 
     all_activities = mandatory_plan.activities + planned_disc
@@ -327,6 +350,7 @@ def _assign_modes(
     skims: list[Skim],
     client: LLMClient,
     vehicle_access: list[bool] | None = None,
+    pc: PromptConfig | None = None,
 ) -> list[dict]:
     """Run mode choice for each tour and return trip rows.
 
@@ -338,10 +362,14 @@ def _assign_modes(
         client: LLM client.
         vehicle_access: Per-tour vehicle access. When *None*,
             falls back to ``hh.num_vehicles > 0``.
+        pc: Configurable prompts. Falls back to defaults
+            when *None*.
 
     Returns:
         A list of trip row dicts.
     """
+    if pc is None:
+        pc = PromptConfig()
     trip_rows: list[dict] = []
     for tour_idx, tour in enumerate(day_plan.tours):
         mode_reasoning: str | None = None
@@ -368,6 +396,7 @@ def _assign_modes(
                     options,
                     client,
                     hh,
+                    step=pc.mode_choice,
                 )
                 mode_reasoning = mc.reasoning
 
@@ -401,6 +430,7 @@ def _simulate_agent(
     client: LLMClient,
     n_zone_candidates: int,
     vehicle_access: list[bool] | None = None,
+    pc: PromptConfig | None = None,
 ) -> tuple[list[dict], dict, list[dict]]:
     """Run all LLM steps for one agent.
 
@@ -411,15 +441,20 @@ def _simulate_agent(
         all_pois: All POIs in the study area.
         skims: Skim matrices (one per mode).
         client: LLM client (may be a RateLimiter).
-        n_zone_candidates: Max zones offered for work/school choice.
-        vehicle_access: Per-tour vehicle access (True/False). When
-            *None*, falls back to ``hh.num_vehicles > 0``.
+        n_zone_candidates: Max zones offered for work/school
+            choice.
+        vehicle_access: Per-tour vehicle access (True/False).
+            When *None*, falls back to
+            ``hh.num_vehicles > 0``.
+        pc: Configurable prompts. Falls back to defaults
+            when *None*.
 
     Returns:
         Tuple of (trip_rows, day_plan_row, activity_rows).
         trip_rows is a list of dicts, one per trip.
         day_plan_row is a single dict.
-        activity_rows is a list of dicts, one per routable activity.
+        activity_rows is a list of dicts, one per routable
+        activity.
     """
     day_plan, day_plan_row, activity_rows = _build_agent_plan(
         agent,
@@ -429,6 +464,7 @@ def _simulate_agent(
         skims,
         client,
         n_zone_candidates,
+        pc=pc,
     )
 
     if day_plan is None:
@@ -441,6 +477,7 @@ def _simulate_agent(
         skims,
         client,
         vehicle_access,
+        pc=pc,
     )
     return trip_rows, day_plan_row, activity_rows
 
@@ -455,6 +492,7 @@ def _simulate_household(
     model: str = "gpt-4o-mini",
     work_counts: dict[str, int] | None = None,
     school_counts: dict[str, int] | None = None,
+    pc: PromptConfig | None = None,
 ) -> tuple[list[dict], list[dict], list[dict]]:
     """Run all LLM steps for every member of a household.
 
@@ -471,12 +509,17 @@ def _simulate_household(
         model: LLM model name forwarded to household-level calls.
         work_counts: Zone-level POI counts for work zones.
         school_counts: Zone-level POI counts for school zones.
+        pc: Configurable prompts. Falls back to defaults
+            when *None*.
 
     Returns:
         Tuple of (trip_rows, day_plan_rows, activity_rows) combined
         across all household members.
     """
     from aibm.tour import Tour
+
+    if pc is None:
+        pc = PromptConfig()
 
     # Phase 1: Build each member's day plan (up to tours).
     agent_plans: list[tuple[Agent, DayPlan | None, dict, list[dict]]] = []
@@ -491,6 +534,7 @@ def _simulate_household(
             n_zone_candidates,
             work_counts=work_counts,
             school_counts=school_counts,
+            pc=pc,
         )
         agent_plans.append((agent, day_plan, day_plan_row, activity_rows))
 
@@ -519,6 +563,7 @@ def _simulate_household(
                 skims,
                 client=client,
                 model=model,
+                step=pc.joint_activities,
             )
             for _, _, dpr, _ in agent_plans:
                 dpr["prompt_joint"] = prompt_joint
@@ -562,6 +607,7 @@ def _simulate_household(
                     skims,
                     client=client,
                     model=model,
+                    step=pc.escort,
                 )
                 # Update agent_plans with modified plans.
                 updated: list[
@@ -612,6 +658,7 @@ def _simulate_household(
             skims,
             client=client,
             model=model,
+            step=pc.vehicle_allocation,
         )
         for _, _, dpr, _ in agent_plans:
             dpr["prompt_vehicle_alloc"] = prompt_vehicle_alloc
@@ -636,6 +683,7 @@ def _simulate_household(
             skims,
             client,
             access,
+            pc=pc,
         )
         hh_trip_rows.extend(trip_rows)
 
@@ -674,6 +722,8 @@ def simulate(cfg: dict) -> None:
         len(work_counts),
         len(school_counts),
     )
+
+    pc = load_prompt_config(sim.get("prompts", {}))
 
     base_client = create_client(model)
     client = RateLimiter(
@@ -714,6 +764,7 @@ def simulate(cfg: dict) -> None:
                 model,
                 work_counts,
                 school_counts,
+                pc,
             ): hh
             for hh in households
         }

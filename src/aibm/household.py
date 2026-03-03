@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 from aibm.activity import normalize_activity_type
 from aibm.agent import Agent, _fmt_mins, _parse_hhmm
+from aibm.prompts import PromptConfig, StepPrompt, build_prompt
 
 if TYPE_CHECKING:
     import random
@@ -80,6 +81,7 @@ class Household:
         skims: list[Skim],
         client: LLMClient | None = None,
         model: str = "gemini-2.5-flash-lite",
+        step: StepPrompt | None = None,
     ) -> tuple[dict[str, list[bool]], str]:
         """Decide which members get vehicle access per tour.
 
@@ -95,6 +97,8 @@ class Household:
             client: An LLM client. Required when an LLM call is
                 needed.
             model: LLM model name for the allocation call.
+            step: Configurable prompt sections. Falls back to
+                built-in defaults when *None*.
 
         Returns:
             Tuple of (mapping of agent id to list of booleans
@@ -162,16 +166,15 @@ class Household:
                 + "\n".join(tour_summaries)
             )
 
-        prompt = (
+        if step is None:
+            step = PromptConfig().vehicle_allocation
+
+        data_block = (
             f"This household has {self.num_vehicles} vehicle(s) "
-            f"for {len(licensed_with_tours)} licensed adults.\n\n"
-            "Members and their tours:\n"
-            + "\n".join(member_lines)
-            + "\n\nAssign vehicle access (true/false) to each "
-            "member for each tour. Prioritise members who need "
-            "the car most (long distances, work commutes, "
-            "chained trips)."
+            f"for {len(licensed_with_tours)} licensed adults."
+            "\n\nMembers and their tours:\n" + "\n".join(member_lines)
         )
+        prompt = build_prompt(step, {}, data_block)
 
         # Build the list of all (agent_id, tour_idx) pairs
         # for the schema.
@@ -249,6 +252,7 @@ class Household:
         skims: list[Skim],
         client: LLMClient | None = None,
         model: str = "gemini-2.5-flash-lite",
+        step: StepPrompt | None = None,
     ) -> tuple[dict[str, DayPlan], str]:
         """Assign escort duty and insert stops into parent tours.
 
@@ -266,6 +270,8 @@ class Household:
             client: An LLM client. Required when an LLM call is
                 needed.
             model: LLM model name for the escort call.
+            step: Configurable prompt sections. Falls back to
+                built-in defaults when *None*.
 
         Returns:
             Tuple of (updated parent_plans dict with escort stops
@@ -318,17 +324,16 @@ class Household:
             )
             parent_lines.append(f"- {p.name} (id={p.id}): {sched}")
 
-        prompt = (
-            "This household needs to arrange escort trips "
-            "for children who cannot travel alone.\n\n"
+        if step is None:
+            step = PromptConfig().escort
+
+        data_block = (
             "Children needing escort:\n"
             + "\n".join(child_lines)
             + "\n\nAvailable parents:\n"
             + "\n".join(parent_lines)
-            + "\n\nFor each child activity, assign a parent "
-            "for drop-off and a parent for pick-up. "
-            "The same parent can do both."
         )
+        prompt = build_prompt(step, {}, data_block)
 
         text = client.generate_json(
             model=model,
@@ -437,6 +442,7 @@ class Household:
         model: str = "gemini-2.5-flash-lite",
         n_candidates: int = 10,
         rng: random.Random | None = None,
+        step: StepPrompt | None = None,
     ) -> tuple[list[JointActivity], str]:
         """Propose 0-2 shared activities for the household.
 
@@ -452,6 +458,8 @@ class Household:
             model: LLM model name.
             n_candidates: Max POI candidates per activity type.
             rng: Optional seeded RNG for reproducible sampling.
+            step: Configurable prompt sections. Falls back to
+                built-in defaults when *None*.
 
         Returns:
             Tuple of (list of JointActivity objects (0-2 items),
@@ -521,19 +529,16 @@ class Household:
         if not poi_lines:
             return [], ""
 
-        prompt = (
-            "This household is considering shared activities "
-            "that members can do together.\n\n"
+        if step is None:
+            step = PromptConfig().joint_activities
+
+        data_block = (
             "Household members:\n"
             + "\n".join(member_lines)
             + "\n\nAvailable destinations:\n"
             + "\n".join(poi_lines)
-            + "\n\nPropose 0-2 joint activities that fit "
-            "everyone's schedule. Each activity needs a "
-            "destination, start/end time, and which members "
-            "participate. Only propose activities if they "
-            "make sense given the schedules."
         )
+        prompt = build_prompt(step, {}, data_block)
 
         text = client.generate_json(
             model=model,
