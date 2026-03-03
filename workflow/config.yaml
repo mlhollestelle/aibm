@@ -45,6 +45,160 @@ simulation:
   rate_limit_rpm: 500
   n_zone_candidates: 12
   max_workers: 4
+  # ── Prompt overrides (optional) ──────────────────────────────
+  #
+  # Each prompt has three configurable sections:
+  #   role            — frames the agent's identity/mindset
+  #   context_framing — introduces the data block
+  #   instructions    — tells the LLM what to do and how to respond
+  #
+  # The data block between context_framing and instructions is
+  # auto-injected at runtime (demographics, candidates, travel
+  # times, etc.) and cannot be overridden here.
+  #
+  # Only list the sections you want to change — omitted sections
+  # keep their built-in defaults.
+  #
+  # Placeholders use {name} syntax and are expanded at runtime.
+  #
+  # prompts:
+  #
+  #   # ── persona ──────────────────────────────────────────────
+  #   # Method: Agent.generate_persona()
+  #   # Placeholders: {agent_name}
+  #   # Data block: agent demographics + household context
+  #   persona:
+  #     role: |
+  #       You are creating a behavioural profile for {agent_name}.
+  #     context_framing: "Demographics:"
+  #     instructions: |
+  #       Write a 1-2 sentence persona describing this person's
+  #       travel habits, preferences, and daily routine. Be
+  #       specific and grounded in the demographics above.
+  #
+  #   # ── mode_choice ──────────────────────────────────────────
+  #   # Method: Agent.choose_mode() / choose_tour_mode()
+  #   # Placeholders: {agent_name}
+  #   # Data block: background + available mode options with
+  #   #   travel times
+  #   mode_choice:
+  #     role: |
+  #       You are {agent_name}, deciding how to travel today.
+  #     context_framing: "Background:"
+  #     instructions: |
+  #       Pick exactly one mode. Respond with:
+  #       - "reasoning": a short personal story (2-3 sentences)
+  #         explaining your choice.
+  #       - "choice": the mode name exactly as listed above.
+  #
+  #   # ── zone_choice ──────────────────────────────────────────
+  #   # Method: Agent.choose_work_zone() / choose_school_zone()
+  #   # Placeholders: {agent_name}, {purpose}
+  #   # Data block: background + candidate zones with POI counts
+  #   #   + travel times from home
+  #   zone_choice:
+  #     role: |
+  #       You are {agent_name}, choosing a {purpose} location.
+  #     context_framing: "Background:"
+  #     instructions: |
+  #       Pick exactly one zone id for your {purpose}. Respond
+  #       with the zone id and your reasoning.
+  #
+  #   # ── activities ───────────────────────────────────────────
+  #   # Method: Agent.generate_activities()
+  #   # Placeholders: {agent_name}, {types_list}
+  #   # Data block: agent background
+  #   activities:
+  #     role: |
+  #       You are {agent_name}, planning your day.
+  #     context_framing: "Background:"
+  #     instructions: |
+  #       Only include out-of-home activities. Include mandatory
+  #       activities: work if employed, school if student. Also
+  #       include any discretionary activities.
+  #       Allowed activity types: {types_list}.
+  #
+  #   # ── destination ──────────────────────────────────────────
+  #   # Method: Agent.choose_destination()
+  #   # Placeholders: {agent_name}
+  #   # Data block: background + activity type + candidate zones
+  #   #   / POIs + travel times
+  #   destination:
+  #     role: |
+  #       You are {agent_name}, choosing where to do an activity.
+  #     context_framing: "Background:"
+  #     instructions: |
+  #       Pick exactly one id (including the zone: or poi:
+  #       prefix) from the list above. Respond with the id and
+  #       your reasoning.
+  #
+  #   # ── scheduling ───────────────────────────────────────────
+  #   # Method: Agent.schedule_activities()
+  #   # Placeholders: {agent_name}
+  #   # Data block: background + activity list + travel times
+  #   #   between activities + duration hints
+  #   scheduling:
+  #     role: |
+  #       You are {agent_name}, scheduling your day.
+  #     context_framing: "Background:"
+  #     instructions: |
+  #       Assign start_time and end_time (HH:MM strings) to each
+  #       activity. Fixed activities have realistic fixed hours;
+  #       flexible ones fill the remaining time.
+  #
+  #   # ── discretionary ────────────────────────────────────────
+  #   # Method: Agent.plan_discretionary_activities()
+  #   # Placeholders: {agent_name}
+  #   # Data block: background + timeline + free gaps + few-shot
+  #   #   example + candidate POIs with travel times + durations
+  #   # Note: applies to both with-gaps and no-gaps variants.
+  #   discretionary:
+  #     role: |
+  #       You are {agent_name}, planning the rest of your day.
+  #     context_framing: "Background:"
+  #     instructions: |
+  #       For each activity: choose a destination, specify which
+  #       gap it fits in, and assign start_time and end_time as
+  #       HH:MM strings. You must be home by 23:00.
+  #
+  #   # ── vehicle_allocation ───────────────────────────────────
+  #   # Method: Household.allocate_vehicles()
+  #   # Placeholders: (none)
+  #   # Data block: vehicle count + member tour summaries with
+  #   #   destinations and travel times
+  #   vehicle_allocation:
+  #     role: "You are deciding vehicle access for a household."
+  #     context_framing: ""
+  #     instructions: |
+  #       Assign vehicle access (true/false) to each member for
+  #       each tour. Prioritise members who need the car most.
+  #
+  #   # ── escort ───────────────────────────────────────────────
+  #   # Method: Household.plan_escort_trips()
+  #   # Placeholders: (none)
+  #   # Data block: children needing escort + parent schedules
+  #   escort:
+  #     role: "You are arranging escort trips for a household."
+  #     context_framing: |
+  #       This household needs to arrange escort trips for
+  #       children who cannot travel alone.
+  #     instructions: |
+  #       For each child activity, assign a parent for drop-off
+  #       and a parent for pick-up. Same parent can do both.
+  #
+  #   # ── joint_activities ─────────────────────────────────────
+  #   # Method: Household.plan_joint_activities()
+  #   # Placeholders: (none)
+  #   # Data block: member schedules + candidate POIs
+  #   joint_activities:
+  #     role: "You are planning shared activities for a household."
+  #     context_framing: |
+  #       This household is considering shared activities that
+  #       members can do together.
+  #     instructions: |
+  #       Propose 0-2 joint activities that fit everyone's
+  #       schedule. Each needs a destination, start/end time,
+  #       and which members participate.
 
 transit:
   # Set enabled: false to exclude transit from the simulation entirely.
