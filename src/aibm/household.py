@@ -424,7 +424,7 @@ class Household:
             # Rebuild parent's tours.
             parent = member_lookup[eid]
             dp.tours = []
-            parent.build_tours(dp)
+            parent.build_tours(dp, skims=skims)
 
         return parent_plans, prompt
 

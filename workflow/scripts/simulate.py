@@ -298,7 +298,7 @@ def _build_agent_plan(
         return None, day_plan_row, []
 
     day_plan = DayPlan(activities=sorted(routable, key=lambda a: a.start_time or 0))
-    agent.build_tours(day_plan)
+    agent.build_tours(day_plan, skims=skims)
     day_plan_row["n_tours"] = len(day_plan.tours)
 
     activity_rows: list[dict] = [
@@ -529,7 +529,7 @@ def _simulate_household(
                         day_plan.inject_joint(ja.activity)
                         # Rebuild tours.
                         day_plan.tours = []
-                        agent.build_tours(day_plan)
+                        agent.build_tours(day_plan, skims=skims)
                         dpr["n_activities"] = len(day_plan.activities)
                         dpr["n_tours"] = len(day_plan.tours)
 

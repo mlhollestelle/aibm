@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from aibm.activity import VALID_OUT_OF_HOME_TYPES, Activity, normalize_activity_type
-from aibm.day_plan import DayPlan, TimeWindow
+from aibm.day_plan import DayPlan, TimeWindow, _min_travel
 from aibm.llm import LLMClient, create_client
 from aibm.poi import POI
 from aibm.sampling import sample_destinations
@@ -1028,17 +1028,27 @@ class Agent:
 
         return discretionary, prompt
 
-    def build_tours(self, day_plan: DayPlan) -> DayPlan:
+    def build_tours(self, day_plan: DayPlan, skims: list | None = None) -> DayPlan:
         """Convert scheduled activities into Trip/Tour objects.
 
         Builds the sequence home → activity₁ → activity₂ → … → home,
         creating a Trip between each consecutive pair of locations.
         A new Tour starts each time the agent departs from home.
 
+        The departure time for the first trip is computed as
+        ``first_activity.start_time - min_travel_time``, so the
+        agent leaves home early enough to arrive on time.  For all
+        subsequent trips the departure equals ``activity.end_time``
+        (the agent leaves when the activity ends).
+
         No LLM call is made — this is pure logic.
 
         Args:
             day_plan: A DayPlan with scheduled, located activities.
+            skims: Optional list of Skim matrices used to estimate the
+                travel time from home to the first activity.  When
+                ``None`` or empty the travel time is treated as 0,
+                which preserves the previous behaviour.
 
         Returns:
             The same ``day_plan`` with ``tours`` populated.
@@ -1067,9 +1077,13 @@ class Agent:
             locations.append(act.location)
         locations.append(self.home_zone)
 
-        # Build departure times: leave home before first activity,
-        # leave each activity at its end_time, final arrival home
-        times: list[float] = [day_plan.activities[0].start_time or 0]
+        # Build departure times: leave home early enough to arrive at
+        # first activity on time; leave each subsequent activity at its
+        # end_time.
+        _skims = skims or []
+        first_act = day_plan.activities[0]
+        travel_to_first = _min_travel(_skims, self.home_zone, first_act.location)
+        times: list[float] = [(first_act.start_time or 0) - travel_to_first]
         for act in day_plan.activities:
             assert act.end_time is not None
             times.append(act.end_time)
