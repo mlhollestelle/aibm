@@ -61,20 +61,20 @@ simulation:
   #
   # Placeholders use {name} syntax and are expanded at runtime.
   #
-  # prompts:
-  #
-  #   # ── persona ──────────────────────────────────────────────
-  #   # Method: Agent.generate_persona()
-  #   # Placeholders: {agent_name}
-  #   # Data block: agent demographics + household context
-  #   persona:
-  #     role: |
-  #       You are creating a behavioural profile for {agent_name}.
-  #     context_framing: "Demographics:"
-  #     instructions: |
-  #       Write a 1-2 sentence persona describing this person's
-  #       travel habits, preferences, and daily routine. Be
-  #       specific and grounded in the demographics above.
+  prompts:
+
+    # ── persona ──────────────────────────────────────────────
+    # Method: Agent.generate_persona()
+    # Placeholders: {agent_name}
+    # Data block: agent demographics + household context
+    persona:
+      instructions: |
+        Write a 1-2 sentence persona describing this person's
+        travel habits, preferences, and daily routine. Be
+        specific and grounded in the demographics above.
+        Also include one funny, goofy fact about this person
+        (e.g. an unusual hobby, a quirky habit, or a silly
+        fear).
   #
   #   # ── mode_choice ──────────────────────────────────────────
   #   # Method: Agent.choose_mode() / choose_tour_mode()
