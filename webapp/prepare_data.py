@@ -2,8 +2,11 @@
 
 Usage:
     uv run python webapp/prepare_data.py --config workflow/config.yaml
+    uv run python webapp/prepare_data.py --config workflow/config.yaml \
+        --scenario baseline
 """
 
+import argparse
 import json
 import math
 import re
@@ -288,6 +291,11 @@ def export_activities(
 
 
 def main() -> None:
+    _parser = argparse.ArgumentParser(add_help=False)
+    _parser.add_argument("--scenario", default="baseline")
+    _args, _ = _parser.parse_known_args()
+    scenario = _args.scenario
+
     cfg = load_config()
     name = cfg["study_area"]["name"]
     data_dir = Path("data/processed")
@@ -347,7 +355,7 @@ def main() -> None:
 
     # 6. Agents
     export_agents(
-        data_dir / f"{name}_day_plans.parquet",
+        data_dir / f"{name}_day_plans_{scenario}.parquet",
         zone_lut,
         zone_name_lut,
         OUT_DIR / "agents.json",
@@ -355,7 +363,7 @@ def main() -> None:
 
     # 7. Trips (with route geometry + computed arrival)
     export_trips(
-        data_dir / f"{name}_assigned_trips.parquet",
+        data_dir / f"{name}_assigned_trips_{scenario}.parquet",
         node_lut,
         zone_lut,
         mode_graphs,
