@@ -9,6 +9,7 @@ configfile: "workflow/config.yaml"
 NAME = config["study_area"]["name"]
 MODES = config["network"]["modes"]
 TRANSIT = config.get("transit", {}).get("enabled", False)
+SCENARIOS = config.get("scenarios", ["baseline"])
 
 
 rule all:
@@ -27,7 +28,11 @@ rule all:
         ),
         f"data/processed/{NAME}_pois.parquet",
         f"data/processed/{NAME}_pois.gpkg",
-        f"data/processed/{NAME}_assigned_trips.parquet",
+        expand(
+            "data/processed/{NAME}_assigned_trips_{scenario}.parquet",
+            NAME=NAME,
+            scenario=SCENARIOS,
+        ),
         *([f"data/processed/{NAME}_transit_stops.graphml",
            f"data/processed/{NAME}_skim_transit.omx"] if TRANSIT else []),
 
@@ -155,17 +160,19 @@ rule simulate:
         skim_transit=(
             [f"data/processed/{NAME}_skim_transit.omx"] if TRANSIT else []
         ),
+        scenario_yaml="workflow/scenarios/{scenario}.yaml",
     output:
-        trips=f"data/processed/{NAME}_trips.parquet",
-        day_plans=f"data/processed/{NAME}_day_plans.parquet",
+        trips=f"data/processed/{NAME}_trips_{{scenario}}.parquet",
+        day_plans=f"data/processed/{NAME}_day_plans_{{scenario}}.parquet",
     shell:
         "uv run python workflow/scripts/simulate.py"
         " --config workflow/config.yaml"
+        " --scenario {wildcards.scenario}"
 
 
 rule assign_network:
     input:
-        trips=f"data/processed/{NAME}_trips.parquet",
+        trips=f"data/processed/{NAME}_trips_{{scenario}}.parquet",
         networks=expand(
             "data/processed/{NAME}_network_{mode}.graphml", NAME=NAME, mode=MODES
         ),
@@ -175,10 +182,11 @@ rule assign_network:
             [f"data/processed/{NAME}_transit_stops.graphml"] if TRANSIT else []
         ),
     output:
-        f"data/processed/{NAME}_assigned_trips.parquet",
+        f"data/processed/{NAME}_assigned_trips_{{scenario}}.parquet",
     shell:
         "uv run python workflow/scripts/assign_network.py"
         " --config workflow/config.yaml"
+        " --scenario {wildcards.scenario}"
 
 
 rule download_transit:
