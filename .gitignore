@@ -39,8 +39,8 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
-# Webapp generated data
-webapp/static/data/
+# Webapp generated data — committed so Cloudflare Pages can serve it
+# webapp/static/data/
 
 # Snakemake
 .snakemake/
