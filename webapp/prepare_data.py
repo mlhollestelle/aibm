@@ -372,7 +372,7 @@ def main() -> None:
 
     # 8. Activities
     export_activities(
-        data_dir / f"{name}_activities.parquet",
+        data_dir / f"{name}_activities_{scenario}.parquet",
         zone_lut,
         OUT_DIR / "activities.json",
     )

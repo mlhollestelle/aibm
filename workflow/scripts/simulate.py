@@ -690,7 +690,7 @@ def _simulate_household(
     return hh_trip_rows, hh_day_plan_rows, hh_activity_rows
 
 
-def simulate(cfg: dict) -> None:
+def simulate(cfg: dict, scenario: str = "baseline") -> None:
     """Run the full simulation and write output parquets."""
     name = cfg["study_area"]["name"]
     sim = cfg["simulation"]
@@ -786,9 +786,9 @@ def simulate(cfg: dict) -> None:
     out_dir = Path("data/processed")
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    trips_path = out_dir / f"{name}_trips.parquet"
-    day_plans_path = out_dir / f"{name}_day_plans.parquet"
-    activities_path = out_dir / f"{name}_activities.parquet"
+    trips_path = out_dir / f"{name}_trips_{scenario}.parquet"
+    day_plans_path = out_dir / f"{name}_day_plans_{scenario}.parquet"
+    activities_path = out_dir / f"{name}_activities_{scenario}.parquet"
 
     trips_df.to_parquet(trips_path, index=False)
     day_plans_df.to_parquet(day_plans_path, index=False)
@@ -803,4 +803,9 @@ def simulate(cfg: dict) -> None:
 
 
 if __name__ == "__main__":
-    simulate(load_config())
+    import argparse
+
+    _parser = argparse.ArgumentParser(add_help=False)
+    _parser.add_argument("--scenario", default="baseline")
+    _args, _ = _parser.parse_known_args()
+    simulate(load_config(), scenario=_args.scenario)

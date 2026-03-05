@@ -179,7 +179,7 @@ def _route_transit_trip(
         return []
 
 
-def assign_network(cfg: dict) -> Path:
+def assign_network(cfg: dict, scenario: str = "baseline") -> Path:
     """Route each trip and store the node sequence per agent.
 
     Each row in the output parquet corresponds to one trip from
@@ -195,7 +195,7 @@ def assign_network(cfg: dict) -> Path:
     bike_speed = float(net_cfg["bike_speed_kmh"])
     walk_speed = float(net_cfg["walk_speed_kmh"])
 
-    trips = pd.read_parquet(f"data/processed/{name}_trips.parquet")
+    trips = pd.read_parquet(f"data/processed/{name}_trips_{scenario}.parquet")
 
     road_modes = [m for m in cfg["network"]["modes"] if m != "transit"]
     mode_graphs: dict[str, nx.MultiDiGraph] = {}
@@ -312,7 +312,7 @@ def assign_network(cfg: dict) -> Path:
             )
             print("Added origin_buurt and destination_buurt columns")
 
-    output = Path(f"data/processed/{name}_assigned_trips.parquet")
+    output = Path(f"data/processed/{name}_assigned_trips_{scenario}.parquet")
     output.parent.mkdir(parents=True, exist_ok=True)
     result.to_parquet(output, index=False)
 
@@ -322,4 +322,9 @@ def assign_network(cfg: dict) -> Path:
 
 
 if __name__ == "__main__":
-    assign_network(load_config())
+    import argparse
+
+    _parser = argparse.ArgumentParser(add_help=False)
+    _parser.add_argument("--scenario", default="baseline")
+    _args, _ = _parser.parse_known_args()
+    assign_network(load_config(), scenario=_args.scenario)
