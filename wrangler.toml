@@ -1,5 +1,3 @@
 name = "aibm"
 compatibility_date = "2026-03-05"
-
-[assets]
-directory = "./webapp/static"
+pages_build_output_dir = "./webapp/static"
