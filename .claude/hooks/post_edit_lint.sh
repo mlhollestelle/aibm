@@ -11,6 +11,6 @@ print(d.get('tool_input', {}).get('file_path', ''))
 
 if [[ "$file" == *.py ]]; then
     cd /home/martijn/dev/aibm
-    uv run ruff format src tests
-    uv run ruff check src tests --fix
+    uv run ruff format "$file"
+    uv run ruff check "$file" --fix
 fi
