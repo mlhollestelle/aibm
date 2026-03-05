@@ -124,6 +124,43 @@ The pipeline steps are:
 
 Output lands in `data/processed/walcheren_population.parquet`.
 
+### Scenarios
+
+The pipeline supports running multiple simulation scenarios side-by-side.
+Expensive shared steps (network download, grid processing, population
+synthesis, skim matrices, POIs) run once and are reused. Only `simulate`
+and `assign_network` re-run per scenario.
+
+**How it works:**
+
+- `workflow/config.yaml` is the base config with a `scenarios:` list
+- Each scenario has a YAML file in `workflow/scenarios/<name>.yaml` that
+  overrides only the `simulation:` block
+- Scenario outputs are suffixed: `walcheren_assigned_trips_<name>.parquet`
+
+The `baseline` scenario ships with the project and applies no overrides.
+
+**Adding a scenario** (e.g. to test a different model):
+
+1. Create `workflow/scenarios/gpt4o.yaml`:
+   ```yaml
+   simulation:
+     model: gpt-4o
+   ```
+2. Add it to `workflow/config.yaml`:
+   ```yaml
+   scenarios:
+     - baseline
+     - gpt4o
+   ```
+3. Run the pipeline — only the new scenario's simulate and assign steps run:
+   ```sh
+   uv run snakemake --cores 1 -s workflow/Snakefile
+   ```
+
+Any key inside `simulation:` can be overridden per scenario, including
+`model`, `n_households`, `seed`, and individual `prompts:` sections.
+
 ## Web app
 
 Visualise simulation results on an interactive map.
@@ -131,8 +168,11 @@ Visualise simulation results on an interactive map.
 ```sh
 uv sync --group webapp
 
-# Prepare data (after running the pipeline)
+# Prepare data for the baseline scenario (default)
 uv run python webapp/prepare_data.py --config workflow/config.yaml
+
+# Or for a specific scenario
+uv run python webapp/prepare_data.py --config workflow/config.yaml --scenario gpt4o
 
 # Start the server
 uv run uvicorn webapp.app:app --reload
