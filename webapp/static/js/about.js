@@ -53,7 +53,7 @@ async function loadAboutContent() {
 
 function initAbout() {
   // Inject social links
-  fetch("/api/config")
+  fetch("/config.json")
     .then((r) => r.json())
     .then((cfg) => {
       const container = document.getElementById("social-links");
