@@ -728,7 +728,7 @@ def simulate(cfg: dict, scenario: str = "baseline") -> None:
     base_client = create_client(model)
     client = RateLimiter(
         base_client,
-        max_calls=sim["rate_limit_rpm"],
+        max_calls=sim.get("rate_limit_rpm", 500),
         window=60.0,
     )
 
