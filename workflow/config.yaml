@@ -200,6 +200,9 @@ simulation:
   #       schedule. Each needs a destination, start/end time,
   #       and which members participate.
 
+scenarios:
+  - baseline
+
 transit:
   # Set enabled: false to exclude transit from the simulation entirely.
   enabled: true

@@ -1,0 +1,7 @@
+# Baseline scenario — no overrides, uses base simulation config.
+# simulation:
+#   model: gpt-4o-mini
+#   prompts:
+#     persona:
+#       role: |
+#         ...
