@@ -75,6 +75,33 @@ aibm/
 └── uv.lock                    # Locked dependency versions
 ```
 
+## Web App
+
+The web app lives in `webapp/` and visualises simulation results on an interactive map.
+
+**Deployment:** Fully static — hosted on Cloudflare Pages (`webapp/static/` is the
+build output directory). No server to maintain.
+
+**Frontend (vanilla JS, no framework):**
+* MapLibre GL JS v4.7.1 — base map rendering
+* deck.gl v9.1.4 — agent/route data layers (ScatterplotLayer, PathLayer)
+* marked.js v12 — renders the about page from Markdown
+* CartoDB Dark Matter — basemap style
+* Inter — UI font (Google Fonts)
+
+**Key files:**
+* `webapp/prepare_data.py` — converts pipeline parquet output to JSON for the browser
+* `webapp/static/index.html` — single-page app shell
+* `webapp/static/config.json` — social links config (edit directly)
+* `webapp/static/content/about.md` — about page content
+* `webapp/static/js/main.js` — data loading, schedule building, animation loop
+* `webapp/static/js/layers.js` — deck.gl layer factories
+* `webapp/static/js/animation.js` — playback controls (play/pause, speed, time slider)
+* `webapp/static/js/panels.js` — KPI and agent detail side panel
+* `webapp/static/js/about.js` — about overlay (fetches and renders about.md)
+* `webapp/static/data/` — pre-built JSON files served to the browser
+* `webapp/content/` — source config.yaml (kept for reference; not served)
+
 ## Workflow / example model
 
 * The `workflow/` directory contains Snakemake pipeline scripts
