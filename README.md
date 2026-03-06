@@ -165,22 +165,29 @@ Any key inside `simulation:` can be overridden per scenario, including
 
 Visualise simulation results on an interactive map.
 
-```sh
-uv sync --group webapp
+**Prepare the data** (converts pipeline parquet output to JSON for the browser):
 
-# Prepare data for the baseline scenario (default)
+```sh
+# For the baseline scenario (default)
 uv run python webapp/prepare_data.py --config workflow/config.yaml
 
 # Or for a specific scenario
 uv run python webapp/prepare_data.py --config workflow/config.yaml --scenario gpt4o
-
-# Start the server
-uv run uvicorn webapp.app:app --reload
 ```
 
-Open http://127.0.0.1:8000 in your browser.
+The app is fully static — open `webapp/static/index.html` directly in your
+browser, or serve it with any static file server:
+
+```sh
+# Python's built-in server
+cd webapp/static && python -m http.server 8000
+```
+
+Then open http://localhost:8000 in your browser.
 
 To customise the app content, edit these two files:
 
-- `webapp/content/about.md` — article shown in the "About this project" overlay
-- `webapp/content/config.yaml` — GitHub and LinkedIn URLs shown as icon links in the sidebar
+- `webapp/static/content/about.md` — article shown in the "About this project" overlay
+- `webapp/static/config.json` — GitHub and LinkedIn URLs shown as icon links in the sidebar
+
+**Deployment:** The `webapp/static/` directory is deployed as-is to Cloudflare Pages.
