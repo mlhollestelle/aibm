@@ -430,8 +430,8 @@ function init() {
       const panel = document.getElementById("side-panel");
       panel.classList.toggle("expanded");
       btnToggle.textContent = panel.classList.contains("expanded")
-        ? "▼"
-        : "▲";
+        ? "Stats ▼"
+        : "Stats ▲";
     });
   }
 
