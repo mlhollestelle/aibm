@@ -91,6 +91,7 @@ function buildSchedules(agents, trips, activities) {
  * Uses pre-computed cumulative distances.
  */
 function interpolateRoute(route, cumDists, fraction) {
+  if (route.length === 0) return null;
   if (route.length < 2) return route[0];
   const totalDist = cumDists[cumDists.length - 1];
   if (totalDist === 0) return route[0];
@@ -132,6 +133,7 @@ function agentStateAt(sched, time) {
       const pos = interpolateRoute(
         trip.route, trip.cumDists, Math.min(frac, 1)
       );
+      if (!pos) continue;
       const color = MODE_COLORS[trip.mode] || MODE_COLORS.car;
       return {
         lon: pos[0],
