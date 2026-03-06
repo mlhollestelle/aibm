@@ -40,7 +40,7 @@ _ACTIVITY_MIN_DURATIONS: dict[str, str] = {
 
 def _parse_hhmm(value: str) -> float:
     """Parse a HH:MM string to minutes from midnight (e.g. '17:30' → 1050.0)."""
-    h, m = value.split(":")
+    h, m, *_ = value.split(":")
     return int(h) * 60 + int(m)
 
 

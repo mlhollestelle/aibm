@@ -19,6 +19,7 @@ def test_parse_hhmm() -> None:
     assert _parse_hhmm("08:00") == 480.0
     assert _parse_hhmm("17:30") == 1050.0
     assert _parse_hhmm("00:00") == 0.0
+    assert _parse_hhmm("14:30:00") == 870.0
 
 
 def test_fmt_mins() -> None:

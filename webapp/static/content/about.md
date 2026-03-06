@@ -341,6 +341,14 @@ This required a normalisation layer — something a traditional
 model never needs because choice alternatives are coded
 numerically.
 
+Time values have the same problem. The model was asked to return
+times in `HH:MM` format. Some responses came back as `HH:MM:SS`.
+The parser expected exactly two colon-separated parts and crashed,
+silently dropping the affected household. The fix was one line —
+discard anything after the first two parts — but the failure mode
+was subtle: no error visible to the user, just missing trips in
+the output.
+
 ### Clock time works better than minutes-from-midnight
 
 Internally, the model uses minutes-from-midnight floats. Early
