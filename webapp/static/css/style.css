@@ -554,10 +554,14 @@ body {
     margin-bottom: 0;
   }
 
-  .panel-title { display: none; }
+  /* Show AIBM + alpha badge; hide only the subtitle */
+  .panel-title {
+    flex: 0 0 auto;
+  }
+  .panel-title .subtitle { display: none; }
+  .panel-title h2 { font-size: 15px; }
 
   #btn-about {
-    order: -1;
     width: auto;
     margin-bottom: 0;
     padding: 4px 10px;
