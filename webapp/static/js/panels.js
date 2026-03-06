@@ -143,7 +143,7 @@ function renderDepartureHistogram(trips) {
 
   let html = '<div class="kpi-section">';
   html += '<div class="kpi-title">Trip departures</div>';
-  html += `<svg class="hist-svg" width="${svgW}" ` +
+  html += `<svg class="hist-svg" width="100%" ` +
     `height="${svgH}" viewBox="0 0 ${svgW} ${svgH}">`;
   html += bars + labels;
   html += "</svg></div>";
@@ -259,7 +259,7 @@ function renderTripLengthDistribution(trips) {
   let html = '<div class="kpi-section">';
   html += '<div class="kpi-title">Trip length (km)</div>';
   html +=
-    `<svg class="hist-svg" width="${svgW}" height="${svgH}" ` +
+    `<svg class="hist-svg" width="100%" height="${svgH}" ` +
     `viewBox="0 0 ${svgW} ${svgH}">`;
   html += rows + axisLabels;
   html += "</svg></div>";
