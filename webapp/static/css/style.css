@@ -20,8 +20,22 @@
   box-sizing: border-box;
 }
 
-html, body {
+html {
   height: 100%;
+  font-family: "Inter", -apple-system, system-ui, sans-serif;
+  background: var(--bg-darkest);
+  color: var(--text-primary);
+}
+
+body {
+  height: 100%;
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  grid-template-rows: 1fr 48px;
+  grid-template-areas:
+    "map panel"
+    "controls panel";
+  overflow: hidden;
   font-family: "Inter", -apple-system, system-ui, sans-serif;
   background: var(--bg-darkest);
   color: var(--text-primary);
@@ -29,19 +43,12 @@ html, body {
 
 /* ── Layout ──────────────────────────────────────── */
 #map-container {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 300px;
-  bottom: 0;
+  grid-area: map;
+  position: relative;
 }
 
 #side-panel {
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 300px;
-  height: 100%;
+  grid-area: panel;
   background: var(--bg-panel);
   border-left: 1px solid var(--border-subtle);
   padding: 16px;
@@ -78,10 +85,7 @@ html, body {
 
 /* ── Time controls bar ───────────────────────────── */
 #time-bar {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 300px;
+  grid-area: controls;
   height: 48px;
   background: var(--bg-panel);
   border-top: 1px solid var(--border-subtle);
@@ -91,10 +95,6 @@ html, body {
   padding: 0 16px;
   z-index: 10;
   box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.3);
-}
-
-#map-container {
-  bottom: 48px;
 }
 
 #btn-play {
@@ -137,9 +137,24 @@ html, body {
   text-align: right;
 }
 
+/* ── Mobile panel toggle (hidden on desktop) ─────── */
+#btn-panel-toggle {
+  display: none;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 4px 6px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+#btn-panel-toggle:hover { color: var(--text-primary); }
+
 /* ── KPI panel ───────────────────────────────────── */
 .kpi-section {
   margin-bottom: 14px;
+  overflow-x: auto;
 }
 
 .kpi-title {
@@ -226,10 +241,7 @@ html, body {
 /* ── Loading overlay ─────────────────────────────── */
 #loading-overlay {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 300px;
-  bottom: 0;
+  inset: 0;
   background: rgba(17, 20, 24, 0.85);
   display: flex;
   align-items: center;
@@ -497,3 +509,47 @@ html, body {
 }
 #about-body pre code { background: none; border: none; padding: 0; font-size: 13px; }
 #about-body hr { border: none; border-top: 1px solid var(--border-subtle); margin: 20px 0; }
+
+/* ── Mobile layout ───────────────────────────────── */
+@media (max-width: 768px) {
+  body {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr 48px auto;
+    grid-template-areas:
+      "map"
+      "controls"
+      "panel";
+    height: 100dvh;
+  }
+
+  #side-panel {
+    border-left: none;
+    border-top: 1px solid var(--border-subtle);
+    max-height: 56px;
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+    padding: 0 16px;
+  }
+
+  #side-panel.expanded {
+    max-height: 45vh;
+    overflow-y: auto;
+  }
+
+  #panel-header {
+    height: 56px;
+    align-items: center;
+    margin-bottom: 0;
+  }
+
+  #side-panel .subtitle { display: none; }
+
+  #panel-body { display: none; }
+  #side-panel.expanded #panel-body {
+    display: block;
+    padding-top: 8px;
+    padding-bottom: 12px;
+  }
+
+  #btn-panel-toggle { display: block; }
+}

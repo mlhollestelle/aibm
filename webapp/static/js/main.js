@@ -424,6 +424,19 @@ function init() {
       }
     },
   });
+
+  // Mobile panel toggle
+  const btnToggle = document.getElementById("btn-panel-toggle");
+  if (btnToggle) {
+    btnToggle.addEventListener("click", () => {
+      const panel = document.getElementById("side-panel");
+      panel.classList.toggle("expanded");
+      btnToggle.textContent = panel.classList.contains("expanded")
+        ? "▼"
+        : "▲";
+    });
+  }
+
   loadData();
 }
 
