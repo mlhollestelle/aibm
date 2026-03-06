@@ -208,6 +208,12 @@ def export_trips(
             d = zone_lut.get(str(row["destination"]))
             if o and d:
                 coords = [o, d]
+            else:
+                print(
+                    f"Warning: no route for trip {row['agent_id']} "
+                    f"{row['origin']} → {row['destination']}, skipping"
+                )
+                continue
 
         # Compute arrival time from graph edge weights
         arrival = None
