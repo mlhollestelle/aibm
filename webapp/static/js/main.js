@@ -425,17 +425,36 @@ function init() {
     },
   });
 
-  // Mobile panel toggle
+  // Mobile panel toggle (button + swipe)
   const btnToggle = document.getElementById("btn-panel-toggle");
+  const sidePanel = document.getElementById("side-panel");
+
+  function setPanelExpanded(expand) {
+    sidePanel.classList.toggle("expanded", expand);
+    if (btnToggle) {
+      btnToggle.textContent = expand ? "Stats ▼" : "Stats ▲";
+    }
+  }
+
   if (btnToggle) {
     btnToggle.addEventListener("click", () => {
-      const panel = document.getElementById("side-panel");
-      panel.classList.toggle("expanded");
-      btnToggle.textContent = panel.classList.contains("expanded")
-        ? "Stats ▼"
-        : "Stats ▲";
+      setPanelExpanded(!sidePanel.classList.contains("expanded"));
     });
   }
+
+  // Swipe up on panel → expand; swipe down → collapse
+  let touchStartY = null;
+  sidePanel.addEventListener("touchstart", (e) => {
+    touchStartY = e.touches[0].clientY;
+  }, { passive: true });
+  sidePanel.addEventListener("touchend", (e) => {
+    if (touchStartY === null) return;
+    const dy = touchStartY - e.changedTouches[0].clientY;
+    if (Math.abs(dy) > 30) {
+      setPanelExpanded(dy > 0);
+    }
+    touchStartY = null;
+  }, { passive: true });
 
   loadData();
 }
