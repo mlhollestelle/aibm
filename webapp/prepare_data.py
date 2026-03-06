@@ -193,7 +193,7 @@ def export_trips(
     for _, row in df.iterrows():
         route_nodes = row["route_nodes"]
         departure = row["departure_time"]
-        mode = row["mode"]
+        mode = row["mode"] if pd.notna(row["mode"]) else None
 
         # Build route coordinates from node IDs
         coords = []
