@@ -6,6 +6,7 @@ from aibm.household import Household
 from aibm.llm import (
     AnthropicClient,
     GeminiClient,
+    GrokClient,
     LLMClient,
     RateLimiter,
     create_client,
@@ -27,6 +28,7 @@ __all__ = [
     "Agent",
     "AnthropicClient",
     "GeminiClient",
+    "GrokClient",
     "Household",
     "JointActivity",
     "LLMClient",

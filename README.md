@@ -2,11 +2,12 @@
 
 ## Prerequisites
 
-This project uses LLMs to power agent decisions. It supports three providers:
+This project uses LLMs to power agent decisions. It supports four providers:
 
 - [Gemini API](https://aistudio.google.com/) (default)
 - [Anthropic API](https://platform.claude.com/)
 - [OpenAI API](https://platform.openai.com/)
+- [xAI Grok API](https://console.x.ai/)
 
 Set the API key for the provider you want to use:
 
@@ -19,13 +20,16 @@ export ANTHROPIC_API_KEY=your_key_here
 
 # For OpenAI
 export OPENAI_API_KEY=your_key_here
+
+# For xAI Grok
+export XAI_API_KEY=your_key_here
 ```
 
 To make this permanent, add the line to your shell config (e.g. `~/.bashrc` or `~/.zshrc`).
 
 The provider is selected automatically based on the model name. Names starting
 with `claude` use Anthropic; names starting with `gpt-`, `o1`, or `o3` use
-OpenAI; everything else uses Gemini:
+OpenAI; names starting with `grok-` use xAI; everything else uses Gemini:
 
 ```python
 from aibm import Agent
@@ -38,6 +42,9 @@ agent = Agent(name="Alice", model="claude-sonnet-4-20250514")
 
 # Uses OpenAI
 agent = Agent(name="Alice", model="gpt-4o")
+
+# Uses xAI Grok
+agent = Agent(name="Alice", model="grok-4-1")
 ```
 
 ## Get started
@@ -142,7 +149,7 @@ The `baseline` scenario ships with the project and applies no overrides.
 
 **Adding a scenario** (e.g. to test a different model):
 
-1. Create `workflow/scenarios/gpt4o.yaml`:
+1. Create `workflow/scenarios/my_scenario.yaml`:
    ```yaml
    simulation:
      model: gpt-4o
