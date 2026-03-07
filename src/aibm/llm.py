@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import collections
 import json
+import os
 import re
 import threading
 import time
@@ -241,16 +242,73 @@ class OpenAIClient:
         return text
 
 
+class GrokClient:
+    """LLM client backed by xAI Grok.
+
+    Uses the OpenAI-compatible xAI API endpoint. Reads
+    ``XAI_API_KEY`` from the environment and connects to
+    ``https://api.x.ai/v1``.
+
+    Args:
+        client: An existing ``openai.OpenAI`` instance pointed at
+            the xAI base URL.  When *None* a new one is created
+            (reads ``XAI_API_KEY`` from the environment).
+        max_tokens: Maximum tokens in the LLM response.
+    """
+
+    def __init__(
+        self,
+        client: Any = None,
+        max_tokens: int = 4096,
+    ) -> None:
+        if client is None:
+            import openai
+
+            client = openai.OpenAI(
+                api_key=os.environ["XAI_API_KEY"],
+                base_url="https://api.x.ai/v1",
+            )
+        self._client: Any = client
+        self._max_tokens = max_tokens
+
+    def generate_json(
+        self,
+        model: str,
+        prompt: str,
+        schema: dict[str, Any],
+    ) -> str:
+        schema_text = json.dumps(schema, indent=2)
+        full_prompt = (
+            f"{prompt}\n\n"
+            "Respond with valid JSON matching this schema:\n"
+            f"{schema_text}\n"
+            "Output ONLY the JSON object, no other text."
+        )
+        response = self._client.chat.completions.create(
+            model=model,
+            max_tokens=self._max_tokens,
+            messages=[{"role": "user", "content": full_prompt}],
+            response_format={"type": "json_object"},
+        )
+        text: str | None = response.choices[0].message.content
+        if not text:
+            raise ValueError("LLM returned an empty response")
+        return _strip_code_fences(text)
+
+
 def create_client(model: str) -> LLMClient:
     """Pick the right LLM client based on the model name.
 
     Names starting with ``"claude"`` use :class:`AnthropicClient`;
     names starting with ``"gpt-"``, ``"o1"``, or ``"o3"`` use
-    :class:`OpenAIClient`; everything else defaults to
+    :class:`OpenAIClient`; names starting with ``"grok-"`` use
+    :class:`GrokClient`; everything else defaults to
     :class:`GeminiClient`.
     """
     if model.startswith("claude"):
         return AnthropicClient()
     if model.startswith(("gpt-", "o1", "o3")):
         return OpenAIClient()
+    if model.startswith("grok-"):
+        return GrokClient()
     return GeminiClient()

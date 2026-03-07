@@ -7,6 +7,7 @@ import pytest
 from aibm.llm import (
     AnthropicClient,
     GeminiClient,
+    GrokClient,
     OpenAIClient,
     RateLimiter,
     _strict_schema,
@@ -249,6 +250,78 @@ def test_openai_passes_schema_as_response_format() -> None:
     assert sent_schema["additionalProperties"] is False
 
 
+# --- GrokClient ---
+
+
+def test_grok_generate_json_returns_text() -> None:
+    inner = MagicMock()
+    msg = MagicMock()
+    msg.content = '{"x": 1}'
+    inner.chat.completions.create.return_value.choices = [MagicMock(message=msg)]
+    client = GrokClient(client=inner)
+
+    result = client.generate_json(
+        model="grok-4-1",
+        prompt="hello",
+        schema={"type": "object"},
+    )
+
+    assert result == '{"x": 1}'
+    inner.chat.completions.create.assert_called_once()
+
+
+def test_grok_raises_on_empty_response() -> None:
+    inner = MagicMock()
+    msg = MagicMock()
+    msg.content = None
+    inner.chat.completions.create.return_value.choices = [MagicMock(message=msg)]
+    client = GrokClient(client=inner)
+
+    with pytest.raises(ValueError, match="empty response"):
+        client.generate_json(model="grok-4-1", prompt="hello", schema={})
+
+
+def test_grok_strips_code_fences() -> None:
+    inner = MagicMock()
+    msg = MagicMock()
+    msg.content = "```json\n{\"x\": 1}\n```"
+    inner.chat.completions.create.return_value.choices = [MagicMock(message=msg)]
+    client = GrokClient(client=inner)
+
+    result = client.generate_json(model="grok-4-1", prompt="hello", schema={})
+
+    assert result == '{"x": 1}'
+
+
+def test_grok_prompt_includes_schema() -> None:
+    inner = MagicMock()
+    msg = MagicMock()
+    msg.content = '{"x": 1}'
+    inner.chat.completions.create.return_value.choices = [MagicMock(message=msg)]
+    client = GrokClient(client=inner)
+
+    schema = {"type": "object", "properties": {"x": {"type": "number"}}}
+    client.generate_json(model="grok-4-1", prompt="hello", schema=schema)
+
+    call_kwargs = inner.chat.completions.create.call_args.kwargs
+    sent_prompt = call_kwargs["messages"][0]["content"]
+    assert "hello" in sent_prompt
+    assert '"type": "object"' in sent_prompt
+
+
+def test_grok_uses_json_object_response_format() -> None:
+    inner = MagicMock()
+    msg = MagicMock()
+    msg.content = '{"x": 1}'
+    inner.chat.completions.create.return_value.choices = [MagicMock(message=msg)]
+    client = GrokClient(client=inner)
+
+    client.generate_json(model="grok-4-1", prompt="hello", schema={})
+
+    call_kwargs = inner.chat.completions.create.call_args.kwargs
+    assert call_kwargs["response_format"] == {"type": "json_object"}
+
+
 # --- create_client ---
 
 
@@ -274,6 +347,18 @@ def test_create_client_o3_returns_openai() -> None:
     with patch.object(OpenAIClient, "__init__", return_value=None):
         client = create_client("o3-mini")
     assert isinstance(client, OpenAIClient)
+
+
+def test_create_client_grok_returns_grok() -> None:
+    with patch.object(GrokClient, "__init__", return_value=None):
+        client = create_client("grok-4-1")
+    assert isinstance(client, GrokClient)
+
+
+def test_create_client_grok_fast_returns_grok() -> None:
+    with patch.object(GrokClient, "__init__", return_value=None):
+        client = create_client("grok-4-1-mini-fast")
+    assert isinstance(client, GrokClient)
 
 
 # --- RateLimiter ---
