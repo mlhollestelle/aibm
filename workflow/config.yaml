@@ -202,6 +202,8 @@ simulation:
 
 scenarios:
   - baseline
+  - grok_4_1
+  - grok_4_1_fast
 
 transit:
   # Set enabled: false to exclude transit from the simulation entirely.

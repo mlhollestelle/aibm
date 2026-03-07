@@ -1,0 +1,5 @@
+# Baseline scenario using grok-4-1-mini-fast (fast reasoning).
+# Verify the exact model ID at https://console.x.ai/
+simulation:
+  model: grok-4-1-mini-fast
+  rate_limit_rpm: 60
