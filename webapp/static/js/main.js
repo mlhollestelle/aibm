@@ -385,9 +385,11 @@ function rebuildLayers() {
   const activities = selectedActivities();
   if (activities.length > 0) {
     layers.push(createDestinationLayer(activities));
-    layers.push(createDestinationLabelLayer(activities));
   }
   layers.push(createAgentLayer(agentPositions, onAgentHover, onAgentClick));
+  if (activities.length > 0) {
+    layers.push(createDestinationLabelLayer(activities));
+  }
   deckInstance.setProps({ layers });
 }
 
