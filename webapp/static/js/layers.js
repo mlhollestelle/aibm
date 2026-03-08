@@ -10,6 +10,20 @@ const MODE_COLORS = {
 const ACTIVITY_COLOR = [115, 128, 145]; // grey
 const HOME_COLOR = [140, 150, 165];     // light steel-blue-grey
 
+// Destination dot colours per activity type
+const DEST_COLORS = {
+  work:              [255, 180,  50],
+  shopping:          [200,  80, 200],
+  leisure:           [ 50, 200, 100],
+  eating_out:        [230, 100,  60],
+  education:         [ 50, 200, 200],
+  personal_business: [180, 140, 255],
+};
+
+function destColor(type) {
+  return DEST_COLORS[(type || "").toLowerCase()] ?? [200, 140, 80];
+}
+
 /**
  * Create the animated agent ScatterplotLayer.
  * @param {Array} positions - [{lon, lat, r, g, b, radius, agent}]
@@ -35,6 +49,55 @@ function createAgentLayer(positions, onHover, onClick) {
       getFillColor: positions,
       getRadius: positions,
     },
+  });
+}
+
+/**
+ * Create destination dot ScatterplotLayer for a selected agent's activities.
+ * @param {Array} activities - activity objects with .location and .type
+ */
+function createDestinationLayer(activities) {
+  return new deck.ScatterplotLayer({
+    id: "selected-destinations",
+    data: activities,
+    getPosition: (d) => d.location,
+    getRadius: 70,
+    getFillColor: (d) => {
+      const c = destColor(d.type);
+      return [c[0], c[1], c[2], 230];
+    },
+    getLineColor: [255, 255, 255, 200],
+    stroked: true,
+    filled: true,
+    lineWidthMinPixels: 2,
+    radiusMinPixels: 7,
+    radiusMaxPixels: 18,
+    pickable: false,
+  });
+}
+
+/**
+ * Create a TextLayer labelling each destination with its activity type.
+ * @param {Array} activities - activity objects with .location and .type
+ */
+function createDestinationLabelLayer(activities) {
+  return new deck.TextLayer({
+    id: "selected-destination-labels",
+    data: activities,
+    getPosition: (d) => d.location,
+    getText: (d) => (d.type || "activity").replace(/_/g, " "),
+    getSize: 12,
+    getColor: [255, 255, 255, 230],
+    getPixelOffset: [0, -22],
+    fontFamily: "Inter, sans-serif",
+    fontWeight: "600",
+    background: true,
+    getBackgroundColor: (d) => {
+      const c = destColor(d.type);
+      return [c[0], c[1], c[2], 210];
+    },
+    backgroundPadding: [5, 2, 5, 2],
+    pickable: false,
   });
 }
 

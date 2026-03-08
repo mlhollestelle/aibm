@@ -366,17 +366,27 @@ function selectedRoutes() {
   );
 }
 
+function selectedActivities() {
+  if (!selectedAgentId) return [];
+  const sched = agentSchedules[selectedAgentId];
+  if (!sched) return [];
+  return sched.activities;
+}
+
 function rebuildLayers() {
   if (!deckInstance) return;
-  const layers = [
-    createAgentLayer(
-      agentPositions, onAgentHover, onAgentClick
-    ),
-  ];
+  // Layer order: routes → destinations → labels → agents (top)
+  const layers = [];
   const routes = selectedRoutes();
   if (routes.length > 0) {
     layers.push(createRouteLayer(routes));
   }
+  const activities = selectedActivities();
+  if (activities.length > 0) {
+    layers.push(createDestinationLayer(activities));
+    layers.push(createDestinationLabelLayer(activities));
+  }
+  layers.push(createAgentLayer(agentPositions, onAgentHover, onAgentClick));
   deckInstance.setProps({ layers });
 }
 
