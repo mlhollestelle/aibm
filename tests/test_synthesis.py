@@ -66,9 +66,10 @@ def test_elderly_are_retired() -> None:
     households = synthesize_population([spec], seed=0)
     for hh in households:
         for agent in hh.members:
-            assert agent.employment == "retired", (
-                f"Agent aged {agent.age} should be retired"
-            )
+            if agent.age >= 65:
+                assert agent.employment == "retired", (
+                    f"Agent aged {agent.age} should be retired"
+                )
 
 
 def test_zone_spec_defaults() -> None:
@@ -76,3 +77,88 @@ def test_zone_spec_defaults() -> None:
     households = synthesize_population([spec], seed=0)
     assert len(households) == 10
     assert all(hh.home_zone == "Z1" for hh in households)
+
+
+def test_school_age_children_are_students() -> None:
+    """Children aged 4-17 must be students; 0-3 are unemployed."""
+    # Use 3-4 person households to generate children alongside
+    # the required adults.
+    spec = ZoneSpec(
+        zone_id="Z1",
+        n_households=300,
+        household_size_dist={3: 0.5, 4: 0.5},
+        age_dist={"0-17": 0.5, "18-64": 0.5, "65+": 0.0},
+    )
+    households = synthesize_population([spec], seed=0)
+    children = [a for hh in households for a in hh.members if a.age < 18]
+    assert len(children) > 0, "Expected some children"
+    for agent in children:
+        if agent.age >= 4:
+            assert agent.employment == "student", (
+                f"Agent aged {agent.age} should be student"
+            )
+        else:
+            assert agent.employment == "unemployed", (
+                f"Agent aged {agent.age} should be unemployed"
+            )
+
+
+def test_older_adults_rarely_students() -> None:
+    """Student fraction among 30+ should be much lower than 18-29."""
+    spec = ZoneSpec(
+        zone_id="Z1",
+        n_households=500,
+        household_size_dist={1: 1.0},
+        age_dist={"0-17": 0.0, "18-64": 1.0, "65+": 0.0},
+    )
+    households = synthesize_population([spec], seed=42)
+    agents = [a for hh in households for a in hh.members]
+    young = [a for a in agents if a.age <= 29]
+    older = [a for a in agents if a.age >= 30]
+    young_student_frac = sum(1 for a in young if a.employment == "student") / max(
+        len(young), 1
+    )
+    older_student_frac = sum(1 for a in older if a.employment == "student") / max(
+        len(older), 1
+    )
+    assert older_student_frac < young_student_frac, (
+        f"30+ student rate ({older_student_frac:.3f}) should be "
+        f"lower than 18-29 rate ({young_student_frac:.3f})"
+    )
+
+
+def test_households_with_minors_have_adult() -> None:
+    """Every household containing a minor must have an adult."""
+    spec = ZoneSpec(zone_id="Z1", n_households=500)
+    households = synthesize_population([spec], seed=0)
+    for hh in households:
+        ages = [a.age for a in hh.members]
+        has_minor = any(a < 18 for a in ages)
+        has_adult = any(a >= 18 for a in ages)
+        if has_minor:
+            assert has_adult, f"Household with ages {ages} has no adult"
+
+
+def test_max_two_adults_per_household() -> None:
+    """No household should have more than two adults."""
+    spec = ZoneSpec(zone_id="Z1", n_households=500)
+    households = synthesize_population([spec], seed=0)
+    for hh in households:
+        n_adults = sum(1 for a in hh.members if a.age >= 18)
+        assert n_adults <= 2, (
+            f"Household has {n_adults} adults (ages {[a.age for a in hh.members]})"
+        )
+
+
+def test_parents_old_enough_for_children() -> None:
+    """Youngest adult must be at least 18 years older than oldest child."""
+    spec = ZoneSpec(zone_id="Z1", n_households=500)
+    households = synthesize_population([spec], seed=0)
+    for hh in households:
+        adults = [a.age for a in hh.members if a.age >= 18]
+        children = [a.age for a in hh.members if a.age < 18]
+        if adults and children:
+            gap = min(adults) - max(children)
+            assert gap >= 18, (
+                f"Age gap {gap} too small (adults={adults}, children={children})"
+            )

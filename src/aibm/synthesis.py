@@ -66,19 +66,134 @@ def _sample_age(rng: random.Random, bracket: str) -> int:
 
 
 def _derive_employment(
-    rng: random.Random, bracket: str, employment_rate: float, student_rate: float
+    rng: random.Random,
+    bracket: str,
+    age: int,
+    employment_rate: float,
+    student_rate: float,
 ) -> str:
-    """Derive employment status from age bracket and rates."""
+    """Derive employment status from age bracket and rates.
+
+    Children aged 4-17 are always students (compulsory education).
+    For adults, the student rate applies fully to ages 18-29 and
+    is scaled down by 0.1 for ages 30-64.
+    """
     if bracket == "0-17":
-        return "unemployed"
+        return "student" if age >= 4 else "unemployed"
     if bracket == "65+":
         return "retired"
+    effective_student_rate = student_rate if age <= 29 else student_rate * 0.1
     roll = rng.random()
     if roll < employment_rate:
         return "employed"
-    if roll < employment_rate + student_rate:
+    if roll < employment_rate + effective_student_rate:
         return "student"
     return "unemployed"
+
+
+def _sample_adult_bracket(
+    rng: random.Random,
+    age_dist: dict[str, float],
+) -> str:
+    """Sample an age bracket restricted to adults (18+)."""
+    adult_dist = {k: v for k, v in age_dist.items() if k != "0-17"}
+    if not adult_dist:
+        return "18-64"
+    return _sample(rng, adult_dist)
+
+
+def _sample_partner_age(
+    rng: random.Random,
+    bracket: str,
+    ref_age: int,
+    max_gap: int = 10,
+) -> int:
+    """Sample an age near *ref_age*, clamped to *bracket* bounds."""
+    if bracket == "18-64":
+        lo, hi = 18, 64
+    else:
+        lo, hi = 65, 90
+    lo = max(lo, ref_age - max_gap)
+    hi = min(hi, ref_age + max_gap)
+    return rng.randint(lo, hi)
+
+
+def _make_agent(
+    rng: random.Random,
+    spec: ZoneSpec,
+    age: int,
+    bracket: str,
+    counter: int,
+) -> Agent:
+    """Create a single Agent with derived attributes."""
+    employment = _derive_employment(
+        rng,
+        bracket,
+        age,
+        spec.employment_rate,
+        spec.student_rate,
+    )
+    has_license = False if age < 18 else rng.random() < spec.license_rate
+    return Agent(
+        name=f"Agent {counter}",
+        age=age,
+        employment=employment,
+        has_license=has_license,
+    )
+
+
+def _generate_members(
+    rng: random.Random,
+    size: int,
+    spec: ZoneSpec,
+    agent_counter: int,
+) -> tuple[list[Agent], int]:
+    """Generate household members with plausible composition.
+
+    Rules:
+    - Single-person households: any age bracket.
+    - Multi-person (2+): first two members are adults;
+      remaining members are children whose ages are
+      constrained so the youngest adult is at least 18
+      years older.
+    """
+    agents: list[Agent] = []
+
+    if size == 1:
+        bracket = _sample_adult_bracket(rng, spec.age_dist)
+        age = _sample_age(rng, bracket)
+        agents.append(_make_agent(rng, spec, age, bracket, agent_counter))
+        return agents, agent_counter + 1
+
+    # --- Multi-person: first member is always an adult ---
+    bracket1 = _sample_adult_bracket(rng, spec.age_dist)
+    age1 = _sample_age(rng, bracket1)
+    agents.append(_make_agent(rng, spec, age1, bracket1, agent_counter))
+    agent_counter += 1
+
+    # --- Second member: adult partner, similar age ---
+    bracket2 = bracket1
+    age2 = _sample_partner_age(rng, bracket2, age1)
+    agents.append(_make_agent(rng, spec, age2, bracket2, agent_counter))
+    agent_counter += 1
+
+    # --- Remaining members (positions 3, 4): children ---
+    youngest_adult = min(age1, age2)
+    max_child_age = min(17, youngest_adult - 18)
+
+    for _ in range(size - 2):
+        if max_child_age >= 0:
+            age = rng.randint(0, max_child_age)
+            agents.append(_make_agent(rng, spec, age, "0-17", agent_counter))
+        else:
+            # Adults too young to have children — add
+            # another adult instead.
+            br = _sample_adult_bracket(rng, spec.age_dist)
+            age = _sample_age(rng, br)
+            agents.append(_make_agent(rng, spec, age, br, agent_counter))
+        agent_counter += 1
+
+    return agents, agent_counter
 
 
 def synthesize_population(
@@ -89,6 +204,11 @@ def synthesize_population(
 
     No LLM calls are made. ``persona``, ``work_zone``, and ``school_zone`` are
     left as ``None`` — those are set in S2 (``generate_persona``).
+
+    Household composition rules ensure plausible structures:
+    multi-person households always have at least two adults,
+    and children are age-constrained relative to the youngest
+    parent.
 
     Args:
         zone_configs: One :class:`ZoneSpec` per zone to generate.
@@ -114,21 +234,13 @@ def synthesize_population(
                 income_level=income_level,
             )
 
-            for _ in range(size):
-                bracket = _sample(rng, spec.age_dist)
-                age = _sample_age(rng, bracket)
-                employment = _derive_employment(
-                    rng, bracket, spec.employment_rate, spec.student_rate
-                )
-                has_license = False if age < 18 else rng.random() < spec.license_rate
-
-                agent = Agent(
-                    name=f"Agent {agent_counter}",
-                    age=age,
-                    employment=employment,
-                    has_license=has_license,
-                )
-                agent_counter += 1
+            members, agent_counter = _generate_members(
+                rng,
+                size,
+                spec,
+                agent_counter,
+            )
+            for agent in members:
                 hh.add_member(agent)
 
             households.append(hh)
