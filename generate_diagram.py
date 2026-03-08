@@ -93,6 +93,14 @@ def load_simulation_data(
     acts = _load("activities")
     sample = _load("sample")
 
+    # Normalise household_id to str in all DataFrames to avoid type mismatches
+    dp["household_id"] = dp["household_id"].astype(str)
+    sample["household_id"] = sample["household_id"].astype(str)
+    if "household_id" in trips.columns:
+        trips["household_id"] = trips["household_id"].astype(str)
+    if "household_id" in acts.columns:
+        acts["household_id"] = acts["household_id"].astype(str)
+
     # ------------------------------------------------------------------ #
     # Main household — pick the one with the most simulated members
     # ------------------------------------------------------------------ #
@@ -100,8 +108,7 @@ def load_simulation_data(
     main_hh_id = str(hh_counts.idxmax())
     members_df = dp[dp["household_id"] == main_hh_id].reset_index(drop=True)
 
-    sample_hh = sample[sample["household_id"].astype(str) == main_hh_id]
-    sample_row = sample_hh.iloc[0]
+    sample_row = sample[sample["household_id"] == main_hh_id].iloc[0]
 
     household: dict[str, Any] = {
         "id": f"HH-{main_hh_id}",
@@ -124,12 +131,13 @@ def load_simulation_data(
     # ------------------------------------------------------------------ #
     # Focus agent — employed/student member with the most activities
     # ------------------------------------------------------------------ #
+    act_counts = acts.groupby("agent_id").size()
     best_row = members_df.iloc[0]
     best_n = -1
     for _, row in members_df.iterrows():
         if row["employment"] not in ("employed", "student"):
             continue
-        n = acts[acts["agent_id"] == row["agent_id"]].shape[0]
+        n = act_counts.get(row["agent_id"], 0)
         if n > best_n:
             best_n = n
             best_row = row
@@ -165,9 +173,7 @@ def load_simulation_data(
             {
                 "type": r["activity_type"],
                 "destination_id": (
-                    str(r["poi_id"])
-                    if pd.notna(r.get("poi_id"))  # type: ignore[arg-type]
-                    else r["location"]
+                    str(r["poi_id"]) if pd.notna(r["poi_id"]) else r["location"]
                 ),
                 "start_time": _mins_to_hm(r["start_time"]),
                 "end_time": _mins_to_hm(r["end_time"]),
@@ -187,19 +193,18 @@ def load_simulation_data(
     # ------------------------------------------------------------------ #
     # Vehicle allocation — first household with a non-empty prompt
     # ------------------------------------------------------------------ #
+    first_mode_by_agent = trips.groupby("agent_id")["mode"].first()
+
     veh_prompt = ""
     veh_response: dict[str, Any] = {}
-    for _, member_row in dp.iterrows():
-        val = member_row.get("prompt_vehicle_alloc", "")
-        if not (isinstance(val, str) and len(val) > 50):
-            continue
-        veh_hh_id = member_row["household_id"]
-        veh_members = dp[dp["household_id"] == veh_hh_id]
-        licensed = veh_members[veh_members["has_license"]]
+    veh_candidates = dp[dp["prompt_vehicle_alloc"].fillna("").str.len() > 50]
+    if not veh_candidates.empty:
+        veh_row = veh_candidates.iloc[0]
+        veh_prompt = veh_row["prompt_vehicle_alloc"]
+        veh_members = dp[dp["household_id"] == veh_row["household_id"]]
         allocations = []
-        for _, lr in licensed.iterrows():
-            lt = trips[trips["agent_id"] == lr["agent_id"]]
-            mode = lt["mode"].iloc[0] if not lt.empty else "unknown"
+        for _, lr in veh_members[veh_members["has_license"]].iterrows():
+            mode = first_mode_by_agent.get(lr["agent_id"], "unknown")
             has_vehicle = mode == "car"
             allocations.append(
                 {
@@ -213,9 +218,10 @@ def load_simulation_data(
                     ),
                 }
             )
-        veh_prompt = val
         veh_response = {"allocations": allocations}
-        break
+
+    # Store the focus agent name so build_document uses the same agent
+    household["focus_agent_name"] = best_row["name"]
 
     # ------------------------------------------------------------------ #
     # Build the examples dict
@@ -223,21 +229,24 @@ def load_simulation_data(
     def _resp(d: dict) -> str:
         return json.dumps(d, indent=2, ensure_ascii=False)
 
+    def _prompt(col: str) -> str:
+        return _truncate(str(best_row[col] or ""))
+
     examples: dict[str, dict[str, str]] = {
         "persona": {
-            "prompt": _truncate(str(best_row["prompt_persona"] or "")),
+            "prompt": _prompt("prompt_persona"),
             "response": _resp({"persona": best_row["persona"]}),
         },
         "activities": {
-            "prompt": _truncate(str(best_row["prompt_activities"] or "")),
+            "prompt": _prompt("prompt_activities"),
             "response": _resp({"activities": act_list}),
         },
         "schedule": {
-            "prompt": _truncate(str(best_row["prompt_schedule"] or "")),
+            "prompt": _prompt("prompt_schedule"),
             "response": _resp(mandatory_sched),
         },
         "discretionary": {
-            "prompt": _truncate(str(best_row["prompt_discretionary"] or "")),
+            "prompt": _prompt("prompt_discretionary"),
             "response": _resp(discr_response),
         },
         "mode_choice": {
@@ -337,9 +346,8 @@ def sequence_diagram(household: dict[str, Any]) -> str:
         f"    participant HH  as Household {hh_id}",
     ]
     part_ids = []
-    for m in members:
-        pid = m["name"].split()[-1][:2].upper()  # e.g. "99903" → "99"
-        pid = f"A{members.index(m) + 1}"
+    for i, m in enumerate(members, 1):
+        pid = f"A{i}"
         parts.append(f"    participant {pid}  as Agent: {m['name']}")
         part_ids.append((pid, m))
     parts.append("    participant LLM as 🤖 LLM (Claude / Gemini / GPT)")
@@ -352,9 +360,7 @@ def sequence_diagram(household: dict[str, Any]) -> str:
     lines.append("    Note over SIM,LLM: Phase 1 — Individual day planning")
     for pid, m in part_ids:
         emp = m["employment"]
-        mandatory = (
-            "work" if emp == "employed" else "school" if emp == "student" else "leisure"
-        )
+        mandatory = {"employed": "work", "student": "school"}.get(emp, "leisure")
         lines += [
             "",
             f"    SIM ->> {pid}: generate_persona()",
@@ -483,9 +489,10 @@ def build_document(
     )
     member_table = "\n".join([header, sep, age_row, emp_row, lic_row])
 
-    # Focus agent for individual examples
+    # Use the same focus agent chosen by load_simulation_data
+    focus_name = household.get("focus_agent_name")
     focus = next(
-        (m for m in members if m["employment"] in ("employed", "student")),
+        (m for m in members if m["name"] == focus_name),
         members[0],
     )
 
