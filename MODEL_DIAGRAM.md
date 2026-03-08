@@ -1,21 +1,24 @@
 # AIBM — LLM-Based Agent-Based Travel Demand Model
 
-> Every behavioural decision in this model — persona, activity list,
-> schedule, destination, and mode — is made by an LLM via a structured
-> JSON prompt.  The diagrams and examples below walk through one
-> household's day from start to finish.
+> Every behavioural decision in this model — persona, activity
+> list, schedule, destination, and mode — is made by an LLM via a
+> structured JSON prompt.  The diagrams and examples below walk
+> through one household's day from start to finish.
+>
+> **Data source:** real output from the Walcheren simulation run.
+> Regenerate with `python generate_diagram.py`.
 
 ---
 
 ## Household used in the examples
 
-| | Emma | Liam | Sophie |
-|---|---|---|---|
-| Age | 38 | 40 | 9 |
-| Employment | employed | employed | student |
-| Licence | ✓ | ✓ | — |
+| | Agent 12688 | Agent 12689 | Agent 12690 | Agent 12691 |
+|---|---|---|---|---|
+| Age | 37 | 63 | 17 | 50 |
+| Employment | unemployed | employed | unemployed | student |
+| Licence | ✓ | — | — | ✓ |
 
-**Household:** 1 vehicle · middle income · home zone 1042
+**Household HH-6717:** 2 vehicle(s) · medium income · home zone E0314N3883
 
 ---
 
@@ -23,11 +26,12 @@
 
 ```mermaid
 flowchart TD
-    HH([🏠 Household HH-042\n1 vehicle · 3 members])
+    HH(["🏠 HH-6717\n2 vehicle(s) · 4 members"])
 
-    HH --> A1[👩 Emma\nemployed · licensed]
-    HH --> A2[👨 Liam\nemployed · licensed]
-    HH --> A3[👧 Sophie\nstudent]
+    A1["Agent 12688\nunemployed · licensed"]
+    A2["Agent 12689\nemployed · no licence"]
+    A3["Agent 12690\nunemployed · no licence"]
+    A4["Agent 12691\nstudent · licensed"]
 
     subgraph P1["Phase 1 — Individual day planning (per agent)"]
         direction TB
@@ -66,83 +70,116 @@ flowchart TD
         O3[("📦 activities\ntype · location · times")]
     end
 
-    A1 & A2 & A3 --> P1
+    A1 & A2 & A3 & A4 --> P1
     P1 --> P1a --> P1b --> P2 --> P3
     P3 --> OUT
 ```
 
 ---
 
-## 2 · End-to-end sequence for household HH-042
+## 2 · End-to-end sequence for household HH-6717
 
 ```mermaid
 sequenceDiagram
     autonumber
     participant SIM as Simulator
-    participant HH  as Household HH-042
-    participant EM  as Agent: Emma
-    participant LI  as Agent: Liam
-    participant SP  as Agent: Sophie
+    participant HH  as Household HH-6717
+    participant A1  as Agent: Agent 12688
+    participant A2  as Agent: Agent 12689
+    participant A3  as Agent: Agent 12690
     participant LLM as 🤖 LLM (Claude / Gemini / GPT)
 
     Note over SIM,LLM: Phase 1 — Individual day planning
 
-    SIM ->> EM: generate_persona()
-    EM ->> LLM: prompt: demographics + household context
-    LLM -->> EM: {"persona": "pragmatic working mother …"}
+    SIM ->> A1: generate_persona()
+    A1 ->> LLM: prompt: demographics + household context
+    LLM -->> A1: {"persona": "Agent 12688, a 37-year-old unemployed individual residing in …"}
 
-    SIM ->> EM: generate_activities()
-    EM ->> LLM: prompt: persona + employment status
-    LLM -->> EM: {"activities": [escort, work, shopping, escort]}
+    SIM ->> A1: generate_activities()
+    A1 ->> LLM: prompt: persona + employment status
+    LLM -->> A1: {"activities": [leisure, ...]}
 
-    SIM ->> EM: schedule_activities(mandatory)
-    EM ->> LLM: prompt: activities + travel times
-    LLM -->> EM: {"activities": [{escort 07:45}, {work 08:30-17:00}, …]}
+    SIM ->> A1: schedule_activities(mandatory)
+    A1 ->> LLM: prompt: activities + travel times
+    LLM -->> A1: {"activities": [{leisure timed}]}
 
-    SIM ->> EM: plan_discretionary_activities()
-    EM ->> LLM: prompt: schedule + free windows + nearby POIs
-    LLM -->> EM: {"activities": [{shopping 07:50}, {eating_out 17:00}]}
+    SIM ->> A1: plan_discretionary_activities()
+    A1 ->> LLM: prompt: schedule + free windows + nearby POIs
+    LLM -->> A1: {"activities": [discretionary stops]}
 
-    Note over EM: build_tours() — no LLM call
+    Note over A1: build_tours() — no LLM call
 
-    SIM ->> LI: generate_persona() … schedule_activities() … build_tours()
-    LI ->> LLM: (same flow as Emma, omitted for brevity)
-    LLM -->> LI: day plan
+    SIM ->> A2: generate_persona()
+    A2 ->> LLM: prompt: demographics + household context
+    LLM -->> A2: {"persona": "At 63, Agent 12689 typically relies on household vehicles fo …"}
 
-    SIM ->> SP: generate_persona() … build_tours()
-    SP ->> LLM: (student flow)
-    LLM -->> SP: day plan
+    SIM ->> A2: generate_activities()
+    A2 ->> LLM: prompt: persona + employment status
+    LLM -->> A2: {"activities": [work, ...]}
+
+    SIM ->> A2: schedule_activities(mandatory)
+    A2 ->> LLM: prompt: activities + travel times
+    LLM -->> A2: {"activities": [{work timed}]}
+
+    SIM ->> A2: plan_discretionary_activities()
+    A2 ->> LLM: prompt: schedule + free windows + nearby POIs
+    LLM -->> A2: {"activities": [discretionary stops]}
+
+    Note over A2: build_tours() — no LLM call
+
+    SIM ->> A3: generate_persona()
+    A3 ->> LLM: prompt: demographics + household context
+    LLM -->> A3: {"persona": "Agent 12690 is a 17-year-old who relies on household vehicle …"}
+
+    SIM ->> A3: generate_activities()
+    A3 ->> LLM: prompt: persona + employment status
+    LLM -->> A3: {"activities": [leisure, ...]}
+
+    SIM ->> A3: schedule_activities(mandatory)
+    A3 ->> LLM: prompt: activities + travel times
+    LLM -->> A3: {"activities": [{leisure timed}]}
+
+    SIM ->> A3: plan_discretionary_activities()
+    A3 ->> LLM: prompt: schedule + free windows + nearby POIs
+    LLM -->> A3: {"activities": [discretionary stops]}
+
+    Note over A3: build_tours() — no LLM call
 
     Note over SIM,LLM: Phase 1a — Joint activities
 
     SIM ->> HH: plan_joint_activities()
     HH ->> LLM: prompt: member schedules + POI candidates
-    LLM -->> HH: {"activities": [{eating_out, Pizzeria Roma, 17:00, [Emma,Liam]}]}
-    HH ->> EM: inject joint activity + rebuild tours
-    HH ->> LI: inject joint activity + rebuild tours
+    LLM -->> HH: {"activities": [joint stop, if any]}
+    HH ->> A1: inject joint activity + rebuild tours
+    HH ->> A2: inject joint activity + rebuild tours
+    HH ->> A3: inject joint activity + rebuild tours
 
     Note over SIM,LLM: Phase 1b — Escort planning
 
     SIM ->> HH: plan_escort_trips()
-    HH ->> LLM: prompt: Sophie needs escort · available parents
-    LLM -->> HH: {escort: Emma drops off, Emma picks up}
-    HH ->> EM: insert escort activities + rebuild tours
+    HH ->> LLM: prompt: members needing escort · available parents
+    LLM -->> HH: {escort assignments}
+    HH ->> A1: insert escort activities + rebuild tours
 
     Note over SIM,LLM: Phase 2 — Vehicle allocation
 
     SIM ->> HH: allocate_vehicles()
-    HH ->> LLM: prompt: 1 vehicle · Emma + Liam tours
-    LLM -->> HH: {"allocations": [Emma=true, Liam=false]}
+    HH ->> LLM: prompt: 2 vehicle(s) · licensed adults
+    LLM -->> HH: {"allocations": [agent → has_vehicle]}
 
     Note over SIM,LLM: Phase 3 — Mode choice
 
-    SIM ->> EM: choose_tour_mode(tour 0, has_vehicle=true)
-    EM ->> LLM: prompt: tour OD + travel times + vehicle access
-    LLM -->> EM: {"choice": "car", "reasoning": "tight morning schedule …"}
+    SIM ->> A1: choose_tour_mode(tour 0)
+    A1 ->> LLM: prompt: tour OD + travel times + vehicle access
+    LLM -->> A1: {"choice": "...", "reasoning": "..."}
 
-    SIM ->> LI: choose_tour_mode(tour 0, has_vehicle=false)
-    LI ->> LLM: prompt: tour OD + travel times (no car available)
-    LLM -->> LI: {"choice": "transit", "reasoning": "well-served by bus …"}
+    SIM ->> A2: choose_tour_mode(tour 0)
+    A2 ->> LLM: prompt: tour OD + travel times + vehicle access
+    LLM -->> A2: {"choice": "...", "reasoning": "..."}
+
+    SIM ->> A3: choose_tour_mode(tour 0)
+    A3 ->> LLM: prompt: tour OD + travel times + vehicle access
+    LLM -->> A3: {"choice": "...", "reasoning": "..."}
 
     SIM ->> SIM: write trips / day_plans / activities → Parquet
 ```
@@ -151,251 +188,288 @@ sequenceDiagram
 
 ## 3 · Example LLM interactions
 
-Each step below shows the exact prompt sent to the language model and
-the structured JSON it returns.  Outputs feed directly into the next
-step — no hand-coded rules.
+Each step below shows the exact prompt sent to the language model
+and the structured JSON it returns.  Prompts are taken directly
+from the simulation run; responses are reconstructed from the
+parsed output.  Focus agent: **Agent 12689** (age 63, employed).
 
-        ### 3.1 Persona generation (Emma)
+### 3.1 Persona generation (Agent 12689)
 
-        **Prompt sent to LLM**
+**Prompt sent to LLM**
 
-        ```
-        You are modelling a person in an agent-based travel demand model.
+```
+You are creating a behavioural profile for Agent 12689.
+Demographics:
+Age: 63
+Employment: employed
+Has driving licence: no
+Home zone: E0314N3883
+Household vehicles: 2
+Household income: medium
 
-## Agent
-Name: Emma | Age: 38 | Employment: employed | Has licence: true
+Write a 1-2 sentence persona describing this person's travel habits, preferences, and daily routine. Be specific and grounded in the demographics above.
+```
 
-## Household
-Home zone: zone:1042 | Vehicles: 1 | Income: middle
-Members: Emma (38, employed), Liam (40, employed), Sophie (9, student)
+**LLM response (structured JSON)**
 
-Generate a short behavioural persona (1–2 sentences) for this agent.
-Respond with JSON matching the schema: {"persona": string}
-        ```
-
-        **LLM response (structured JSON)**
-
-        ```json
-        {
-  "persona": "Emma is a pragmatic working mother who carefully
-    balances professional commitments with family duties,
-    preferring efficient routes and reliable modes of transport
-    to keep her day on schedule."
+```json
+{
+  "persona": "At 63, Agent 12689 typically relies on household vehicles for transportation, as they do not hold a driving license; this suggests a preference for flexible and familiar travel within their home zone E0314N3883. They likely plan their daily routine around public transport or the availability of household drivers, with activities centered around nearby amenities and community events, balancing mobility with a medium household income that influences their choices."
 }
-        ```
+```
 
-        ### 3.2 Activity list (Emma)
+### 3.2 Activity list (Agent 12689)
 
-        **Prompt sent to LLM**
+**Prompt sent to LLM**
 
-        ```
-        You are modelling a person in an agent-based travel demand model.
+```
+You are Agent 12689, planning your day.
+Background:
+Age: 63
+Employment: employed
+Has driving licence: no
+Home zone: E0314N3883
+Work zone: E0330N3906
+Persona: At 63, Agent 12689 typically relies on household vehicles for transportation, as they do not hold a driving license; this suggests a preference for flexible and familiar travel within their home zone E0314N3883. They likely plan their daily routine around public transport or the availability of household drivers, with activities centered around nearby amenities and community events, balancing mobility with a medium household income that influences their choices.
 
-## Agent
-Name: Emma | Age: 38 | Employment: employed | Has licence: true
-Persona: Emma is a pragmatic working mother who carefully balances
-professional commitments with family duties …
+Only include out-of-home activities. Include mandatory activities: work if you are employed, school if you are a student. Also include any discretionary activities. For each activity specify whether it has a flexible time (is_flexible true) or is fixed (is_flexible false). Work and school are always fixed (is_flexible false).
+Allowed activity types: eating_out, escort, leisure, personal_business, school, shopping, work.
+```
 
-List the activities Emma is likely to perform today (work is mandatory).
-Respond with JSON matching the schema:
-{"activities": [{"type": string, "is_flexible": boolean}]}
-Activity types: work | school | shopping | leisure |
-                eating_out | personal_business | escort
-        ```
+**LLM response (structured JSON)**
 
-        **LLM response (structured JSON)**
-
-        ```json
-        {
-  "activities": [
-    {"type": "escort",   "is_flexible": false},
-    {"type": "work",     "is_flexible": false},
-    {"type": "shopping", "is_flexible": true},
-    {"type": "escort",   "is_flexible": false}
-  ]
-}
-        ```
-
-        ### 3.3 Schedule mandatory activities (Emma)
-
-        **Prompt sent to LLM**
-
-        ```
-        You are modelling a person in an agent-based travel demand model.
-
-## Agent
-Name: Emma | Age: 38 | Employment: employed
-
-## Activities to schedule
-1. escort       – not flexible
-2. work         – not flexible  (duration: 360–540 min)
-3. escort       – not flexible
-
-## Travel times from home (minutes)
-school zone → 8 min (bike) | work zone → 22 min (car/transit)
-
-Assign realistic start and end times (minutes from midnight).
-Respond with JSON:
-{"activities": [{"type": string, "start_time": int, "end_time": int}]}
-        ```
-
-        **LLM response (structured JSON)**
-
-        ```json
-        {
-  "activities": [
-    {"type": "escort",  "start_time": 465, "end_time": 490},
-    {"type": "work",    "start_time": 510, "end_time": 1020},
-    {"type": "escort",  "start_time": 915, "end_time": 940}
-  ]
-}
-        ```
-
-        ### 3.4 Plan discretionary activities (Emma)
-
-        **Prompt sent to LLM**
-
-        ```
-        You are modelling a person in an agent-based travel demand model.
-
-## Agent
-Name: Emma | Age: 38 | Employment: employed
-
-## Fixed schedule
-07:45  drop-off Sophie at school
-08:30  work  →  17:00
-15:15  pick-up Sophie
-
-## Free time windows
-Window A: 07:45 – 08:30  (45 min, near school)
-Window B: 17:00 – 22:00  (300 min, at work zone)
-
-## Nearby POIs
-Window A – shopping: Albert Heijn (4 min), Jumbo (7 min)
-Window B – eating_out: Pizzeria Roma (3 min), De Kaai (8 min)
-            leisure: Sportcentrum Middelburg (12 min)
-
-Plan 0–2 discretionary activities that fit the windows.
-Respond with JSON:
-{"activities": [{"type": string, "destination_id": string,
-                 "start_time": int, "end_time": int}]}
-        ```
-
-        **LLM response (structured JSON)**
-
-        ```json
-        {
+```json
+{
   "activities": [
     {
+      "type": "work",
+      "is_flexible": false
+    },
+    {
+      "type": "leisure",
+      "is_flexible": true
+    },
+    {
       "type": "shopping",
-      "destination_id": "poi:albert_heijn_1",
-      "start_time": 470,
-      "end_time": 500
+      "is_flexible": true
     },
     {
       "type": "eating_out",
-      "destination_id": "poi:pizzeria_roma_1",
-      "start_time": 1020,
-      "end_time": 1065
+      "is_flexible": true
     }
   ]
 }
-        ```
+```
 
-        ### 3.5 Mode choice — Emma's morning tour
+### 3.3 Schedule mandatory activities (Agent 12689)
 
-        **Prompt sent to LLM**
+**Prompt sent to LLM**
 
-        ```
-        You are modelling a person in an agent-based travel demand model.
+```
+You are Agent 12689, scheduling your day.
+Background:
+Age: 63
+Employment: employed
+Has driving licence: no
+Home zone: E0314N3883
+Work zone: E0330N3906
+Persona: At 63, Agent 12689 typically relies on household vehicles for transportation, as they do not hold a driving license; this suggests a preference for flexible and familiar travel within their home zone E0314N3883. They likely plan their daily routine around public transport or the availability of household drivers, with activities centered around nearby amenities and community events, balancing mobility with a medium household income that influences their choices.
 
-## Agent
-Name: Emma | Age: 38 | Has licence: true
+Activities to schedule:
+- work (flexible: no)
 
-## Household
-Vehicles available for this tour: 1 of 1
+Suggested minimum durations:
+- work: 360–540 min (6–9 h)
 
-## Tour
-home (zone:1042) → work (zone:2011) → home (zone:1042)
-Distance: ~18 km
 
-## Available modes and travel times
-car:     28 min   (door-to-door)
-transit: 41 min   (bus + walk)
-bike:    62 min
+Assign a start_time and end_time (as HH:MM strings, e.g. "08:00") to each activity. Ensure each activity starts at least as late as the previous activity's end_time plus the travel time to reach it. Fixed activities have realistic fixed hours; flexible ones fill the remaining time. Return them in chronological order.
+```
 
-Choose a mode. Respond with JSON:
-{"choice": string, "reasoning": string}
-        ```
+**LLM response (structured JSON)**
 
-        **LLM response (structured JSON)**
-
-        ```json
-        {
-  "choice": "car",
-  "reasoning": "Given the 18 km distance and the tight morning
-    schedule with school drop-off, the car is the most practical
-    choice to stay on time. Transit would add 13 extra minutes
-    each way."
-}
-        ```
-
-        ### 3.6 Vehicle allocation (household)
-
-        **Prompt sent to LLM**
-
-        ```
-        You are modelling a household in an agent-based travel demand model.
-
-## Household
-Vehicles: 1 | Licensed adults: Emma, Liam
-
-## Tours today
-Emma  – tour 0: home → school → work → home  (needs car: likely)
-Liam  – tour 0: home → work → home            (needs car: likely)
-
-Allocate the single vehicle across competing tours.
-Respond with JSON:
-{"allocations": [{"agent_id": string, "tour_idx": int,
-                   "has_vehicle": boolean, "reasoning": string}]}
-        ```
-
-        **LLM response (structured JSON)**
-
-        ```json
-        {
-  "allocations": [
+```json
+{
+  "activities": [
     {
-      "agent_id": "emma",
-      "tour_idx": 0,
-      "has_vehicle": true,
-      "reasoning": "Emma needs the car to drop Sophie at school
-        on time before work."
+      "type": "work",
+      "start_time": "09:00",
+      "end_time": "15:00"
+    }
+  ]
+}
+```
+
+### 3.4 Plan discretionary activities (Agent 12689)
+
+**Prompt sent to LLM**
+
+```
+You are Agent 12689, planning the rest of your day.
+Background:
+Age: 63
+Employment: employed
+Has driving licence: no
+Home zone: E0314N3883
+Work zone: E0330N3906
+Persona: At 63, Agent 12689 typically relies on household vehicles for transportation, as they do not hold a driving license; this suggests a preference for flexible and familiar travel within their home zone E0314N3883. They likely plan their daily routine around public transport or the availability of household drivers, with activities centered around nearby amenities and community events, balancing mobility with a medium household income that influences their choices.
+
+Your day in order:
+  06:00  Day starts — you are at home.
+  09:00  Work starts.
+  15:00  Work ends.
+  23:00  You must be home no later than this.
+
+Free time gaps:
+  Gap A: 06:00–08:55 (175 min) — depart from E0314N3883, arrive at E0330N3906
+  Gap B: 15:05–23:00 (475 min) — depart from E0330N3906, arrive at E0314N3883
+
+=== Example (different agent — for reference only) ===
+Emma (38, employed) works 08:30–16:30.
+Free gaps:
+  Gap A: 06:00–08:15 (135 min) — depart from home, arrive at work
+  Gap B: 16:45–23:00 (375 min) — depart from work, return home
+
+Emma wants to plan: shopping, eating_out.
+
+Correct plan:
+  shopping   → Gap B · 16:50–17:35 · supermarket near work
+    Reasoning: Morning gap is too short. Stopping for groceries on the
+    way home from wo
+
+[… truncated for brevity]
+```
+
+**LLM response (structured JSON)**
+
+```json
+{
+  "activities": [
+    {
+      "type": "leisure",
+      "destination_id": "2907836459",
+      "start_time": "09:00",
+      "end_time": "10:30"
     },
     {
-      "agent_id": "liam",
-      "tour_idx": 0,
-      "has_vehicle": false,
-      "reasoning": "Liam's workplace is well-served by transit;
-        he can manage without the car today."
+      "type": "shopping",
+      "destination_id": "2908032462",
+      "start_time": "13:00",
+      "end_time": "13:45"
+    },
+    {
+      "type": "eating_out",
+      "destination_id": "809228755",
+      "start_time": "19:00",
+      "end_time": "20:00"
     }
   ]
 }
-        ```
+```
+
+### 3.5 Mode choice — Agent 12689's first tour
+
+**Prompt sent to LLM**
+
+```
+You are Agent 12689, deciding how to travel today.
+Background:
+Age: 63
+Employment: employed
+Has driving licence: no
+Home zone: E0314N3883
+Work zone: E0330N3906
+Persona: At 63, Agent 12689 typically relies on household vehicles for transportation, as they do not hold a driving license; this suggests a preference for flexible and familiar travel within their home zone E0314N3883. They likely plan their daily routine around public transport or the availability of household drivers, with activities centered around nearby amenities and community events, balancing mobility with a medium household income that influences their choices.
+Household vehicles: 2
+Household income: medium
+
+Available options:
+- bike: 11.969098369074857 minutes
+- walk: 43.364666709697595 minutes
+- transit: 35.81368377696199 minutes
+
+Pick exactly one mode. Respond with:
+- "reasoning": a short personal story (2-3 sentences) explaining your choice.
+- "choice": the mode name exactly as listed above.
+```
+
+**LLM response (structured JSON)**
+
+```json
+{
+  "choice": "bike",
+  "reasoning": "Today, while I would usually prefer to be driven or take transit, I felt like a bike ride would be refreshing. It's a lovely day, and I could use the exercise to boost my mood and stay active. Plus, riding the bike will get me to work faster than walking and avoids the hassle of bus schedules."
+}
+```
+
+### 3.6 Vehicle allocation (household)
+
+**Prompt sent to LLM**
+
+```
+You are deciding vehicle access for a household.
+
+This household has 1 vehicle(s) for 2 licensed adults.
+
+Members and their tours:
+- Agent 14103 (id=a5bd03e6-5177-4fdc-bc62-c151f5d9db3d), age 59, employed, persona: Agent 14103, a 59-year-old employed individual with a medium household income, typically drives their household's single vehicle for daily commutes and errands, preferring to navigate the local area around E0310N3885. They enjoy taking weekend getaways, often exploring nature or visiting family, and prioritize convenience and comfort in their travel plans.
+  Tour 0: E0310N3885 → E0310N3885 (car 6 min, bike 12 min, walk 55 min, transit 139 min)
+- Agent 14104 (id=8e98b088-8f0f-4a08-9e9b-c97192035b86), age 82, retired, persona: At 82 years old, Agent 14104 enjoys the flexibility of a retired lifestyle, often taking leisurely drives in their sole household vehicle through their local area, with a preference for scenic routes that allow for short excursions to nearby parks or community centers. Daily routines include moderate physical activity such as walks or gardening, supplemented by regular visits to the grocery store and occasional trips to visit family, ensuring a balanced blend of independence and social connection.
+  Tour 0: E0310N3885 → E0310N3885 (car 4 min, bike 7 min, walk 32 min, transit 42 min)
+
+Assign vehicle access (true/false) to each member for each tour
+
+[… truncated for brevity]
+```
+
+**LLM response (structured JSON)**
+
+```json
+{
+  "allocations": [
+    {
+      "agent_id": "Agent 14103",
+      "tour_idx": 0,
+      "has_vehicle": true,
+      "reasoning": "Needs the car for the work commute."
+    },
+    {
+      "agent_id": "Agent 14104",
+      "tour_idx": 0,
+      "has_vehicle": false,
+      "reasoning": "Leisure trips are manageable by bike."
+    }
+  ]
+}
+```
 
 ---
 
 ## 4 · What makes this approach powerful
 
-* **No hand-coded rules** — behavioural heterogeneity emerges from the
-  LLM's world knowledge conditioned on demographics and context.
+* **No hand-coded rules** — behavioural heterogeneity emerges from
+  the LLM's world knowledge conditioned on demographics and context.
 * **Traceable reasoning** — every decision comes with a `reasoning`
   field, making the model interpretable by design.
-* **Any LLM back-end** — swap Claude, Gemini, or GPT by changing one
-  config value; the `LLMClient` protocol keeps the rest of the code
-  identical.
-* **Rich context** — prompts can include land-use labels, POI names,
-  real travel times, and household dynamics that would be painful to
-  encode in traditional utility functions.
-* **Incremental refinement** — improving a decision step means editing
-  a prompt template, not retraining a model.
+* **Any LLM back-end** — swap Claude, Gemini, or GPT by changing
+  one config value; the `LLMClient` protocol keeps the rest of the
+  code identical.
+* **Rich context** — prompts include land-use labels, POI names,
+  real travel times, and household dynamics that would be painful
+  to encode in traditional utility functions.
+* **Incremental refinement** — improving a decision step means
+  editing a prompt template, not retraining a model.
+
+---
+
+## 5 · How to regenerate this document
+
+```bash
+# Install pipeline dependencies (pandas, pyarrow, snakemake, …)
+uv sync --group pipeline
+
+# Run the full Walcheren pipeline (produces the parquet files)
+uv run snakemake --cores 1 -s workflow/Snakefile
+
+# Regenerate this diagram document
+python generate_diagram.py
+```
