@@ -15,6 +15,7 @@ SCENARIOS = config.get("scenarios", ["baseline"])
 rule all:
     input:
         f"data/processed/{NAME}_population.parquet",
+        f"data/processed/{NAME}_population_report.txt",
         expand("data/processed/{NAME}_skim_{mode}.omx", NAME=NAME, mode=MODES),
         expand(
             "data/processed/{NAME}_network_{mode}_nodes.parquet",
@@ -125,6 +126,17 @@ rule synthesize:
         " --config workflow/config.yaml"
 
 
+rule validate_population:
+    input:
+        population=f"data/processed/{NAME}_population.parquet",
+        zone_specs=f"data/processed/{NAME}_zone_specs.parquet",
+    output:
+        f"data/processed/{NAME}_population_report.txt",
+    shell:
+        "uv run python workflow/scripts/validate_population.py"
+        " --config workflow/config.yaml"
+
+
 rule export_network:
     input:
         network=f"data/processed/{NAME}_network_{{mode}}.graphml",
@@ -142,6 +154,7 @@ rule export_network:
 rule sample_households:
     input:
         f"data/processed/{NAME}_population.parquet",
+        f"data/processed/{NAME}_population_report.txt",
     output:
         f"data/processed/{NAME}_sample.parquet",
     shell:
