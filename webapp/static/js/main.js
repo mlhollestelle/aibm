@@ -370,7 +370,8 @@ function selectedActivities() {
   if (!selectedAgentId) return [];
   const sched = agentSchedules[selectedAgentId];
   if (!sched) return [];
-  return sched.activities;
+  const home = { type: "home", location: sched.agent.home };
+  return [home, ...sched.activities];
 }
 
 function rebuildLayers() {

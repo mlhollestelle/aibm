@@ -12,6 +12,7 @@ const HOME_COLOR = [140, 150, 165];     // light steel-blue-grey
 
 // Destination dot colours per activity type
 const DEST_COLORS = {
+  home:              [140, 150, 165],
   work:              [255, 180,  50],
   shopping:          [200,  80, 200],
   leisure:           [ 50, 200, 100],
