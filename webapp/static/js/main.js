@@ -16,6 +16,8 @@ let agentSchedules = {};
 let agentPositions = [];
 // Selected agent for detail panel
 let selectedAgentId = null;
+// Agent currently under the cursor (only used when none is selected)
+let hoveredAgentId = null;
 let tooltipEl = null;
 
 // ── Data loading ────────────────────────────────────
@@ -271,8 +273,17 @@ function onAgentHover(info) {
     tooltipEl.style.display = "block";
     tooltipEl.style.left = info.x + 12 + "px";
     tooltipEl.style.top = info.y + 12 + "px";
+    // Show hover route preview when no agent is pinned via click
+    if (!selectedAgentId && hoveredAgentId !== a.id) {
+      hoveredAgentId = a.id;
+      rebuildLayers();
+    }
   } else {
     tooltipEl.style.display = "none";
+    if (!selectedAgentId && hoveredAgentId !== null) {
+      hoveredAgentId = null;
+      rebuildLayers();
+    }
   }
 }
 
@@ -280,6 +291,7 @@ function onAgentHover(info) {
 
 function onAgentClick(info) {
   selectedAgentId = info.object.agent.id;
+  hoveredAgentId = null;
   rebuildLayers();
   const sched = agentSchedules[selectedAgentId];
   if (sched) {
@@ -358,8 +370,9 @@ function modeColorHex(mode) {
 // ── Layer building ──────────────────────────────────
 
 function selectedRoutes() {
-  if (!selectedAgentId) return [];
-  const sched = agentSchedules[selectedAgentId];
+  const id = selectedAgentId ?? hoveredAgentId;
+  if (!id) return [];
+  const sched = agentSchedules[id];
   if (!sched) return [];
   return sched.trips.filter(
     (trip) => trip.route && trip.route.length > 1
@@ -380,7 +393,9 @@ function rebuildLayers() {
   const layers = [];
   const routes = selectedRoutes();
   if (routes.length > 0) {
-    layers.push(createRouteLayer(routes));
+    // Hover preview is slightly more transparent than the click-selected state
+    const routeOpacity = selectedAgentId ? 200 : 130;
+    layers.push(createRouteLayer(routes, routeOpacity));
   }
   const activities = selectedActivities();
   if (activities.length > 0) {
@@ -432,6 +447,7 @@ function init() {
     onClick: (info) => {
       if (!info.object) {
         selectedAgentId = null;
+        hoveredAgentId = null;
         document.getElementById("mode-bubble").classList.add("hidden");
         rebuildLayers();
       }
