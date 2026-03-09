@@ -1,0 +1,3 @@
+# Same model as baseline (gpt-4o-mini) with a different random seed.
+simulation:
+  seed: 99

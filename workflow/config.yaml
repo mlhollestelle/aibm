@@ -202,8 +202,10 @@ simulation:
 
 scenarios:
   - baseline
-  - grok_4_1
-  - grok_4_1_fast
+  - baseline_seed2
+  - baseline_haiku
+  - grok_4_1_fast_non_reasoning
+  - grok_4_1_fast_reasoning
 
 transit:
   # Set enabled: false to exclude transit from the simulation entirely.
