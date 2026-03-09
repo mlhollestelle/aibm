@@ -103,18 +103,19 @@ function createDestinationLabelLayer(activities) {
 }
 
 /**
- * Create a PathLayer highlighting all of the selected agent's
+ * Create a PathLayer highlighting all of the selected (or hovered) agent's
  * daily routes, colored by transport mode.
  * @param {Array} trips - trip objects with .route and .mode
+ * @param {number} opacity - alpha value 0–255 (default 200)
  */
-function createRouteLayer(trips) {
+function createRouteLayer(trips, opacity = 200) {
   return new deck.PathLayer({
     id: "selected-route",
     data: trips,
     getPath: (d) => d.route,
     getColor: (d) => {
       const c = MODE_COLORS[d.mode] ?? MODE_COLORS.car;
-      return [c[0], c[1], c[2], 200];
+      return [c[0], c[1], c[2], opacity];
     },
     getWidth: 4,
     widthMinPixels: 3,
