@@ -62,6 +62,12 @@ function initControls(onTick) {
   sliderTime.value = currentTime;
   labelTime.textContent = formatTime(currentTime);
   onTick(currentTime);
+
+  // Auto-start playback
+  playing = true;
+  btnPlay.textContent = "Pause";
+  lastFrameTs = null;
+  animFrameId = requestAnimationFrame((ts) => tick(ts, onTick));
 }
 
 /**
