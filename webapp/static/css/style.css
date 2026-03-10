@@ -520,6 +520,76 @@ body {
 #about-body pre code { background: none; border: none; padding: 0; font-size: 13px; }
 #about-body hr { border: none; border-top: 1px solid var(--border-subtle); margin: 20px 0; }
 
+/* ── Loading screen content ─────────────────────── */
+#loading-overlay {
+  flex-direction: column;   /* override: was just centering spinner */
+  gap: 0;
+}
+
+#loading-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  max-width: 280px;
+  text-align: center;
+}
+
+.loading-area {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.loading-desc {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.loading-hint {
+  font-size: 12px;
+  color: var(--accent-highlight);
+  border: 1px solid var(--border-subtle);
+  border-radius: 20px;
+  padding: 6px 14px;
+}
+
+/* ── Onboarding hint chip ────────────────────────── */
+#ob-hint {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  background: rgba(28, 33, 39, 0.93);
+  border: 1px solid var(--border-subtle);
+  border-radius: 20px;
+  padding: 8px 18px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  pointer-events: none;
+  white-space: nowrap;
+  animation: ob-in 0.3s ease both;
+}
+
+.ob-hint-out {
+  animation: ob-out 0.3s ease both !important;
+}
+
+@keyframes ob-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(6px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+@keyframes ob-out {
+  from { opacity: 1; transform: translateX(-50%) translateY(0); }
+  to   { opacity: 0; transform: translateX(-50%) translateY(6px); }
+}
+
 /* ── Mobile layout ───────────────────────────────── */
 @media (max-width: 768px) {
   body {
