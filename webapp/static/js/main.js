@@ -414,11 +414,14 @@ function rebuildLayers() {
 
 // ── Init ────────────────────────────────────────────
 
+const MIN_LOADING_MS = 2500;
+
 async function loadData() {
   const [agents, trips, activities] = await Promise.all([
     loadJSON("data/agents.json"),
     loadJSON("data/trips.json"),
     loadJSON("data/activities.json"),
+    new Promise((resolve) => setTimeout(resolve, MIN_LOADING_MS)),
   ]);
 
   const agentsArr = agents || [];
