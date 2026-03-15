@@ -249,8 +249,19 @@ def assign_network(cfg: dict, scenario: str = "baseline") -> Path:
         nearest = ox.nearest_nodes(graph, eastings, northings)
         mode_zone_to_node[mode] = dict(zip(zone_locs, nearest))
 
+    def _route_distance(graph: nx.MultiDiGraph, path: list[int]) -> float:
+        """Sum edge lengths (metres) along *path* in *graph*."""
+        total = 0.0
+        for u, v in zip(path[:-1], path[1:]):
+            edge_data = graph.get_edge_data(u, v)
+            if edge_data:
+                # MultiDiGraph: edge_data is {key: attr_dict}; pick first key.
+                total += min(d.get("length", 0.0) for d in edge_data.values())
+        return total
+
     # Route each trip individually.
     route_nodes: list[list[int]] = []
+    distances: list[float | None] = []
     for _, row in trips.iterrows():
         mode = row.get("mode")
         origin = str(row["origin"])
@@ -258,32 +269,36 @@ def assign_network(cfg: dict, scenario: str = "baseline") -> Path:
 
         if mode == "transit":
             if transit_graph is not None:
-                route_nodes.append(
-                    _route_transit_trip(
-                        origin, dest, transit_zone_to_stop, transit_graph
-                    )
+                path_t = _route_transit_trip(
+                    origin, dest, transit_zone_to_stop, transit_graph
                 )
+                route_nodes.append(path_t)
+                distances.append(None)
             else:
                 route_nodes.append([])
+                distances.append(None)
             continue
 
         if mode not in mode_graphs:
             route_nodes.append([])
+            distances.append(None)
             continue
 
         zone_to_node = mode_zone_to_node[mode]
         if origin not in zone_to_node or dest not in zone_to_node:
             route_nodes.append([])
+            distances.append(None)
             continue
 
         o_node = zone_to_node[origin]
         d_node = zone_to_node[dest]
         if o_node == d_node:
             route_nodes.append([])
+            distances.append(None)
             continue
 
         try:
-            path: list[int] = nx.shortest_path(
+            path = nx.shortest_path(
                 mode_graphs[mode],
                 o_node,
                 d_node,
@@ -291,12 +306,15 @@ def assign_network(cfg: dict, scenario: str = "baseline") -> Path:
             )
         except (nx.NetworkXNoPath, nx.NodeNotFound):
             route_nodes.append([])
+            distances.append(None)
             continue
 
         route_nodes.append(path)
+        distances.append(_route_distance(mode_graphs[mode], path))
 
     result = trips.copy()
     result["route_nodes"] = route_nodes
+    result["distance"] = distances
 
     # Add origin/destination buurt names from zone specs
     specs_path = Path(f"data/processed/{name}_zone_specs.parquet")
