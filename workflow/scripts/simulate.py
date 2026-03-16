@@ -414,11 +414,80 @@ def _assign_modes(
                     "arrival_time": trip.arrival_time,
                     "distance": trip.distance,
                     "escort_agent_id": trip.escort_agent_id,
+                    "joint_ride_id": trip.joint_ride_id,
                     "mode_reasoning": mode_reasoning,
                     "prompt_mode": prompt_mode,
                 }
             )
     return trip_rows
+
+
+def _assign_joint_ride_ids(
+    trip_rows: list[dict],
+    joint_activities: list,
+) -> None:
+    """Mutate trip_rows in-place to assign joint_ride_id where applicable.
+
+    Two cases are handled:
+    - Escort rides: child trip (escort_agent_id set) paired with the
+      matching parent escort trip to the same destination.
+    - Joint activity carpools: household members traveling to the same
+      joint-activity destination from the same origin zone when at
+      least one of them uses a car.
+    """
+    import uuid
+
+    # ── Escort pairing ────────────────────────────────────────────────────
+    child_trips = [r for r in trip_rows if r.get("escort_agent_id")]
+    for child_row in child_trips:
+        if child_row.get("joint_ride_id"):
+            continue
+        escort_id = child_row["escort_agent_id"]
+        dest = child_row["destination"]
+        dep = child_row["departure_time"] or 0.0
+        parent_row = next(
+            (
+                r
+                for r in trip_rows
+                if r["agent_id"] == escort_id
+                and r["destination"] == dest
+                and abs((r["departure_time"] or 0.0) - dep) <= 30
+            ),
+            None,
+        )
+        if parent_row is not None:
+            ride_id = str(uuid.uuid4())
+            child_row["joint_ride_id"] = ride_id
+            parent_row["joint_ride_id"] = ride_id
+
+    # ── Joint activity carpool pairing ────────────────────────────────────
+    for ja in joint_activities:
+        dest = ja.activity.location
+        if dest is None:
+            continue
+        target_arrival = ja.activity.start_time or 0.0
+        candidate_rows = [
+            r
+            for r in trip_rows
+            if r["agent_id"] in ja.participant_ids
+            and r["destination"] == dest
+            and abs((r["arrival_time"] or 0.0) - target_arrival) <= 30
+            and not r.get("joint_ride_id")
+        ]
+        if len(candidate_rows) < 2:
+            continue
+        # Only group trips sharing the same origin zone (true carpool)
+        origins = {r["origin"] for r in candidate_rows}
+        for origin in origins:
+            group = [r for r in candidate_rows if r["origin"] == origin]
+            if len(group) < 2:
+                continue
+            modes = {r.get("mode") for r in group}
+            if "car" not in modes:
+                continue
+            ride_id = str(uuid.uuid4())
+            for r in group:
+                r["joint_ride_id"] = ride_id
 
 
 def _simulate_agent(
@@ -539,6 +608,7 @@ def _simulate_household(
         agent_plans.append((agent, day_plan, day_plan_row, activity_rows))
 
     # Phase 1a: Joint activities for multi-person households.
+    joint: list = []
     if hh.size > 1:
         member_schedules: dict[str, list[Activity]] = {}
         for agent, day_plan, _, _ in agent_plans:
@@ -687,6 +757,7 @@ def _simulate_household(
         )
         hh_trip_rows.extend(trip_rows)
 
+    _assign_joint_ride_ids(hh_trip_rows, joint)
     return hh_trip_rows, hh_day_plan_rows, hh_activity_rows
 
 

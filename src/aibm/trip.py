@@ -20,6 +20,11 @@ class Trip:
             filled in by ``schedule_activities``.
         distance: Trip distance in kilometres.  Optional — may stay ``None``
             when distance data is unavailable.
+        escort_agent_id: Agent id of the parent who is escorting this trip
+            (set on the child's trip only).  ``None`` for non-escort trips.
+        joint_ride_id: UUID string shared by all trips taken together in
+            the same vehicle (escort rides and household carpools).
+            ``None`` for solo trips.
     """
 
     origin: str
@@ -29,3 +34,4 @@ class Trip:
     arrival_time: float | None = None
     distance: float | None = None
     escort_agent_id: str | None = None
+    joint_ride_id: str | None = None
