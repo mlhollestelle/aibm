@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from aibm.activity import Activity, JointActivity
     from aibm.day_plan import DayPlan
     from aibm.llm import LLMClient
+    from aibm.poi import POI
     from aibm.skim import Skim
     from aibm.tour import Tour
 
@@ -436,7 +437,7 @@ class Household:
     def plan_joint_activities(
         self,
         member_schedules: dict[str, list[Activity]],
-        pois_by_type: dict[str, list],
+        pois_by_type: dict[str, list[POI]],
         skims: list[Skim],
         client: LLMClient | None = None,
         model: str = "gemini-2.5-flash-lite",
@@ -591,7 +592,7 @@ class Household:
         data = json.loads(text)
 
         # Build POI lookup.
-        poi_lookup: dict[str, object] = {}
+        poi_lookup: dict[str, POI] = {}
         for act_type in disc_types:
             for p in pois_by_type.get(act_type, []):
                 poi_lookup[p.id] = p
@@ -608,10 +609,9 @@ class Household:
             poi_id = None
             if chosen_id in poi_lookup:
                 p = poi_lookup[chosen_id]
-                poi_id = p.id  # type: ignore[union-attr]
-                zone_id = getattr(p, "zone_id", None)
-                if zone_id is not None:
-                    location = zone_id
+                poi_id = p.id
+                if p.zone_id is not None:
+                    location = p.zone_id
 
             act = Act(
                 type=normalize_activity_type(item["activity_type"]),
