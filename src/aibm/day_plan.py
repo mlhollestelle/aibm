@@ -42,7 +42,9 @@ class TimeWindow:
         return self.end - self.start
 
 
-def _min_travel(skims: list[Skim], origin: str | None, destination: str | None) -> float:
+def _min_travel(
+    skims: list[Skim], origin: str | None, destination: str | None
+) -> float:
     """Return the minimum travel time across all skims for an OD pair.
 
     Returns 0.0 if either zone is None or no skim can route the pair.
