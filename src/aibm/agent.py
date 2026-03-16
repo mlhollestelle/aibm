@@ -1080,7 +1080,9 @@ class Agent:
 
         return discretionary, prompt
 
-    def build_tours(self, day_plan: DayPlan, skims: list[Skim] | None = None) -> DayPlan:
+    def build_tours(
+        self, day_plan: DayPlan, skims: list[Skim] | None = None
+    ) -> DayPlan:
         """Convert scheduled activities into Trip/Tour objects.
 
         Builds the sequence home → activity₁ → activity₂ → … → home,
