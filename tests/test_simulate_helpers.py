@@ -4,6 +4,10 @@ import importlib.util
 import sys
 from pathlib import Path
 
+import pytest
+
+pytest.importorskip("pandas")
+
 from aibm.poi import POI
 
 # ---------------------------------------------------------------------------
