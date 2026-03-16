@@ -94,7 +94,7 @@ def load_skim(path: str | Path, mode: str) -> Skim:
         FileNotFoundError: If *path* does not exist.
     """
     import numpy as np
-    import openmatrix as omx  # type: ignore[import-untyped]
+    import openmatrix as omx  # type: ignore[import-not-found]
 
     path = Path(path)
     if not path.exists():

@@ -4,10 +4,14 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, cast
 
 from aibm.activity import Activity
 from aibm.tour import Tour
 from aibm.trip import Trip
+
+if TYPE_CHECKING:
+    from aibm.skim import Skim
 
 
 @dataclass
@@ -38,7 +42,7 @@ class TimeWindow:
         return self.end - self.start
 
 
-def _min_travel(skims: list, origin: str | None, destination: str | None) -> float:
+def _min_travel(skims: list[Skim], origin: str | None, destination: str | None) -> float:
     """Return the minimum travel time across all skims for an OD pair.
 
     Returns 0.0 if either zone is None or no skim can route the pair.
@@ -55,7 +59,7 @@ def _min_travel(skims: list, origin: str | None, destination: str | None) -> flo
 
 def compute_time_windows(
     mandatory_plan: DayPlan,
-    skims: list,
+    skims: list[Skim],
     home_zone: str | None = None,
     day_start: float = 360.0,
     day_end: float = 1380.0,
@@ -87,7 +91,7 @@ def compute_time_windows(
         for a in mandatory_plan.activities
         if a.start_time is not None and a.end_time is not None
     ]
-    scheduled.sort(key=lambda a: a.start_time)  # type: ignore[arg-type]
+    scheduled.sort(key=lambda a: cast(float, a.start_time))
 
     if not scheduled:
         return [

@@ -7,7 +7,7 @@ import math
 import random
 import uuid
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from aibm.activity import VALID_OUT_OF_HOME_TYPES, Activity, normalize_activity_type
 from aibm.day_plan import DayPlan, TimeWindow, _min_travel
@@ -923,7 +923,7 @@ class Agent:
                 for a in mandatory
                 if a.start_time is not None and a.end_time is not None
             ],
-            key=lambda a: a.start_time,  # type: ignore[arg-type]
+            key=lambda a: cast(float, a.start_time),
         )
         timeline_lines = [f"  {_fmt_mins(360.0)}  Day starts — you are at home."]
         for act in sorted_mandatory:
@@ -999,7 +999,7 @@ class Agent:
             )
 
         # --- Schema (gap field added only when labeled gaps exist) ---
-        activity_item_props: dict = {
+        activity_item_props: dict[str, dict[str, str | list[str]]] = {
             "type": {"type": "string"},
             "destination_id": {"type": "string"},
             "start_time": {"type": "string"},
@@ -1080,7 +1080,7 @@ class Agent:
 
         return discretionary, prompt
 
-    def build_tours(self, day_plan: DayPlan, skims: list | None = None) -> DayPlan:
+    def build_tours(self, day_plan: DayPlan, skims: list[Skim] | None = None) -> DayPlan:
         """Convert scheduled activities into Trip/Tour objects.
 
         Builds the sequence home → activity₁ → activity₂ → … → home,
