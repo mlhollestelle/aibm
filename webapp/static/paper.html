@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AIBM — Paper</title>
+
+  <!-- Inter font -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+    rel="stylesheet"
+  />
+
+  <!-- marked.js (Markdown renderer) -->
+  <script src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js"></script>
+
+  <style>
+    /* Design tokens — kept in sync with style.css */
+    :root {
+      --bg-darkest:  #111418;
+      --bg-panel:    #1c2127;
+      --border-subtle: #2f343c;
+      --accent:      #2d72d2;
+      --accent-hover: #215db0;
+      --accent-highlight: #8abbff;
+      --text-primary: #f6f7f9;
+      --text-muted:  #738091;
+      --text-secondary: #abb3bf;
+      --mono: "SF Mono", "Consolas", monospace;
+    }
+
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html {
+      background: var(--bg-darkest);
+      color: var(--text-primary);
+      font-family: "Inter", -apple-system, system-ui, sans-serif;
+    }
+
+    body {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    /* ── Top bar ── */
+    #top-bar {
+      width: 100%;
+      background: var(--bg-panel);
+      border-bottom: 1px solid var(--border-subtle);
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    #top-bar a.back-link {
+      color: var(--accent-highlight);
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    #top-bar a.back-link:hover { text-decoration: underline; }
+
+    #top-bar .site-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--accent-highlight);
+    }
+
+    /* ── Paper content ── */
+    #paper-container {
+      width: min(760px, 92vw);
+      padding: 48px 0 80px;
+    }
+
+    #paper-body {
+      line-height: 1.7;
+      color: var(--text-secondary);
+    }
+
+    /* Markdown typography */
+    #paper-body h1, #paper-body h2, #paper-body h3 {
+      color: var(--text-primary);
+      font-weight: 700;
+      margin-top: 32px;
+      margin-bottom: 10px;
+    }
+    #paper-body h1 { font-size: 24px; margin-top: 0; }
+    #paper-body h2 { font-size: 18px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 6px; }
+    #paper-body h3 { font-size: 15px; }
+    #paper-body p  { margin-bottom: 14px; font-size: 15px; }
+    #paper-body ul, #paper-body ol { padding-left: 22px; margin-bottom: 14px; font-size: 15px; }
+    #paper-body li { margin-bottom: 6px; }
+    #paper-body a  { color: var(--accent-highlight); text-decoration: none; }
+    #paper-body a:hover { text-decoration: underline; }
+    #paper-body strong { color: var(--text-primary); }
+    #paper-body em { color: var(--text-secondary); }
+
+    #paper-body code {
+      font-family: var(--mono);
+      font-size: 13px;
+      background: var(--bg-panel);
+      border: 1px solid var(--border-subtle);
+      border-radius: 3px;
+      padding: 1px 5px;
+      color: var(--accent-highlight);
+    }
+    #paper-body pre {
+      background: var(--bg-panel);
+      border: 1px solid var(--border-subtle);
+      border-radius: 4px;
+      padding: 14px 18px;
+      overflow-x: auto;
+      margin-bottom: 14px;
+    }
+    #paper-body pre code { background: none; border: none; padding: 0; font-size: 13px; }
+
+    #paper-body hr {
+      border: none;
+      border-top: 1px solid var(--border-subtle);
+      margin: 28px 0;
+    }
+
+    #paper-body table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 14px;
+      font-size: 14px;
+    }
+    #paper-body th, #paper-body td {
+      border: 1px solid var(--border-subtle);
+      padding: 8px 12px;
+      text-align: left;
+    }
+    #paper-body th {
+      background: var(--bg-panel);
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+
+    /* ── Loading state ── */
+    #paper-loading {
+      color: var(--text-muted);
+      font-size: 14px;
+      margin-top: 48px;
+    }
+  </style>
+</head>
+<body>
+  <div id="top-bar">
+    <a class="back-link" href="index.html">← Back to map</a>
+    <span class="site-title">AIBM</span>
+  </div>
+
+  <div id="paper-container">
+    <div id="paper-body">
+      <p id="paper-loading">Loading…</p>
+    </div>
+  </div>
+
+  <script>
+    (async function () {
+      const body = document.getElementById("paper-body");
+      try {
+        const res = await fetch("content/paper.md");
+        if (!res.ok) throw new Error(res.statusText);
+        const md = await res.text();
+        body.innerHTML = marked.parse(md);
+      } catch (err) {
+        body.innerHTML =
+          '<p style="color:var(--text-muted)">Failed to load paper content.</p>';
+      }
+    })();
+  </script>
+</body>
+</html>
