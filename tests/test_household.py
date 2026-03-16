@@ -637,3 +637,74 @@ def test_joint_injected_as_fixed() -> None:
     assert len(result) == 1
     assert result[0].activity.is_flexible is False
     assert result[0].activity.is_joint is True
+
+
+# --- json.loads error handling (Phase 2a) ---
+
+
+def _bad_json_client() -> MagicMock:
+    """Return a mock LLM client that always responds with invalid JSON."""
+    mock = MagicMock()
+    mock.generate_json.return_value = "not-valid-json"
+    return mock
+
+
+def test_allocate_vehicles_bad_json_raises_value_error() -> None:
+    alice = Agent(name="Alice", age=35, employment="employed", has_license=True)
+    bob = Agent(name="Bob", age=33, employment="employed", has_license=True)
+    hh = Household(members=[alice, bob], home_zone="z1", num_vehicles=1)
+
+    from aibm.tour import Tour
+    from aibm.trip import Trip
+
+    trip = Trip(origin="z1", destination="z2")
+    tour = Tour(trips=[trip], home_zone="z1")
+
+    with pytest.raises(ValueError, match="allocate_vehicles"):
+        hh.allocate_vehicles(
+            member_tours={alice.id: [tour], bob.id: [tour]},
+            skims=[],
+            client=_bad_json_client(),
+        )
+
+
+def test_plan_escort_trips_bad_json_raises_value_error() -> None:
+    parent = Agent(name="Parent", age=40, has_license=True)
+    child = Agent(name="Child", age=8)
+    hh = Household(members=[parent, child], home_zone="z1")
+
+    child_act = Activity(
+        type="school", location="school-zone", start_time=480, end_time=900
+    )
+    parent_plan = DayPlan(activities=[])
+
+    with pytest.raises(ValueError, match="plan_escort_trips"):
+        hh.plan_escort_trips(
+            child_activities={child.id: [child_act]},
+            parent_plans={parent.id: parent_plan},
+            skims=[],
+            client=_bad_json_client(),
+        )
+
+
+def test_plan_joint_activities_bad_json_raises_value_error() -> None:
+    alice = Agent(name="Alice", age=35)
+    bob = Agent(name="Bob", age=33)
+    hh = Household(members=[alice, bob], home_zone="z1")
+
+    poi = POI(
+        id="shop1",
+        name="Shop",
+        x=0.0,
+        y=0.0,
+        activity_type="shopping",
+        zone_id="z2",
+    )
+
+    with pytest.raises(ValueError, match="plan_joint_activities"):
+        hh.plan_joint_activities(
+            member_schedules={alice.id: [], bob.id: []},
+            pois_by_type={"shopping": [poi]},
+            skims=[],
+            client=_bad_json_client(),
+        )

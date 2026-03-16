@@ -221,7 +221,13 @@ class Household:
             },
         )
 
-        data = json.loads(text)
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                f"allocate_vehicles (household {self.id!r}): LLM returned"
+                f" invalid JSON — {exc}. Response: {text[:200]!r}"
+            ) from exc
         for item in data["allocations"]:
             aid = item["agent_id"]
             tidx = item["tour_idx"]
@@ -377,7 +383,13 @@ class Household:
             },
         )
 
-        data = json.loads(text)
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                f"plan_escort_trips (household {self.id!r}): LLM returned"
+                f" invalid JSON — {exc}. Response: {text[:200]!r}"
+            ) from exc
 
         from aibm.activity import Activity as Act
 
@@ -589,7 +601,13 @@ class Household:
             },
         )
 
-        data = json.loads(text)
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                f"plan_joint_activities (household {self.id!r}): LLM returned"
+                f" invalid JSON — {exc}. Response: {text[:200]!r}"
+            ) from exc
 
         # Build POI lookup.
         poi_lookup: dict[str, POI] = {}

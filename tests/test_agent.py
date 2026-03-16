@@ -1370,3 +1370,81 @@ def test_plan_discretionary_activities_no_gap_without_windows() -> None:
     schema = mock.generate_json.call_args.kwargs["schema"]
     item = schema["properties"]["planned_activities"]["items"]
     assert "gap" not in item["properties"]
+
+
+# --- json.loads error handling (Phase 2a) ---
+
+
+def _bad_json_client() -> MagicMock:
+    """Return a mock LLM client that always responds with invalid JSON."""
+    mock = MagicMock()
+    mock.generate_json.return_value = "not-valid-json"
+    return mock
+
+
+def test_generate_persona_bad_json_raises_value_error() -> None:
+    agent = Agent(name="Alice", age=30)
+    with pytest.raises(ValueError, match="generate_persona"):
+        agent.generate_persona(client=_bad_json_client())
+
+
+def test_choose_mode_bad_json_raises_value_error() -> None:
+    agent = Agent(name="Alice", age=30, home_zone="z1")
+    options = [ModeOption(mode="car", travel_time=10.0)]
+    with pytest.raises(ValueError, match="choose_mode"):
+        agent.choose_mode(options, client=_bad_json_client())
+
+
+def test_choose_work_zone_bad_json_raises_value_error() -> None:
+    agent = Agent(name="Alice", age=35, employment="employed", home_zone="z1")
+    zone = Zone(id="z2", name="Downtown", x=0.0, y=0.0)
+    with pytest.raises(ValueError, match="_choose_long_term_zone"):
+        agent.choose_work_zone(
+            zones=[zone],
+            travel_times={"z2": {"car": 15.0}},
+            client=_bad_json_client(),
+        )
+
+
+def test_generate_activities_bad_json_raises_value_error() -> None:
+    agent = Agent(name="Alice", age=35, employment="unemployed", home_zone="z1")
+    with pytest.raises(ValueError, match="generate_activities"):
+        agent.generate_activities(client=_bad_json_client())
+
+
+def test_choose_destination_bad_json_raises_value_error() -> None:
+    agent = Agent(name="Alice", age=35, home_zone="z1")
+    activity = Activity(type="shopping")
+    zone = Zone(id="z2", name="Mall", x=0.0, y=0.0)
+    with pytest.raises(ValueError, match="choose_destination"):
+        agent.choose_destination(
+            activity=activity, candidates=[zone], client=_bad_json_client()
+        )
+
+
+def test_schedule_activities_bad_json_raises_value_error() -> None:
+    agent = Agent(name="Alice", age=35, home_zone="z1")
+    acts = [Activity(type="shopping")]
+    with pytest.raises(ValueError, match="schedule_activities"):
+        agent.schedule_activities(acts, client=_bad_json_client())
+
+
+def test_plan_discretionary_bad_json_raises_value_error() -> None:
+    agent = Agent(name="Alice", age=35, home_zone="z1")
+    poi = POI(
+        id="p1",
+        name="Shop",
+        x=0.0,
+        y=0.0,
+        activity_type="shopping",
+        zone_id="z2",
+    )
+    disc = [Activity(type="shopping")]
+    with pytest.raises(ValueError, match="plan_discretionary_activities"):
+        agent.plan_discretionary_activities(
+            mandatory=[],
+            discretionary=disc,
+            pois_by_type={"shopping": [poi]},
+            skims=[],
+            client=_bad_json_client(),
+        )

@@ -214,7 +214,13 @@ class Agent:
             },
         )
 
-        data = json.loads(text)
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                f"generate_persona (agent {self.id!r}): LLM returned invalid"
+                f" JSON — {exc}. Response: {text[:200]!r}"
+            ) from exc
         self.persona = data["persona"]
         return self.persona, prompt
 
@@ -276,7 +282,13 @@ class Agent:
             },
         )
 
-        data = json.loads(text)
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                f"choose_mode (agent {self.id!r}): LLM returned invalid"
+                f" JSON — {exc}. Response: {text[:200]!r}"
+            ) from exc
         chosen_name: str = data["choice"]
         chosen_option = next(opt for opt in options if opt.mode == chosen_name)
         return ModeChoice(option=chosen_option, reasoning=data["reasoning"]), prompt
@@ -412,7 +424,14 @@ class Agent:
             },
         )
 
-        data = json.loads(text)
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                f"_choose_long_term_zone/{purpose} (agent {self.id!r}):"
+                f" LLM returned invalid JSON — {exc}."
+                f" Response: {text[:200]!r}"
+            ) from exc
         chosen_id: str = data["zone_id"]
         reasoning: str = data.get("reasoning", "")
 
@@ -486,7 +505,13 @@ class Agent:
             },
         )
 
-        data = json.loads(text)
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                f"generate_activities (agent {self.id!r}): LLM returned invalid"
+                f" JSON — {exc}. Response: {text[:200]!r}"
+            ) from exc
 
         activities: list[Activity] = []
         for item in data["activities"]:
@@ -652,7 +677,13 @@ class Agent:
             },
         )
 
-        data = json.loads(text)
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                f"choose_destination (agent {self.id!r}): LLM returned invalid"
+                f" JSON — {exc}. Response: {text[:200]!r}"
+            ) from exc
         raw_id: str = data["destination_id"]
         # Strip the prefix so we get a plain id.
         if raw_id.startswith("poi:") or raw_id.startswith("zone:"):
@@ -777,7 +808,13 @@ class Agent:
             },
         )
 
-        data = json.loads(text)
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                f"schedule_activities (agent {self.id!r}): LLM returned invalid"
+                f" JSON — {exc}. Response: {text[:200]!r}"
+            ) from exc
 
         for i, item in enumerate(data["schedule"]):
             if i < len(activities):
@@ -1039,7 +1076,13 @@ class Agent:
             },
         )
 
-        data = json.loads(text)
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                f"plan_discretionary_activities (agent {self.id!r}): LLM"
+                f" returned invalid JSON — {exc}. Response: {text[:200]!r}"
+            ) from exc
 
         # Build a POI lookup across all sampled types
         poi_lookup: dict[str, POI] = {
