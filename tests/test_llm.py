@@ -284,7 +284,7 @@ def test_grok_raises_on_empty_response() -> None:
 def test_grok_strips_code_fences() -> None:
     inner = MagicMock()
     msg = MagicMock()
-    msg.content = "```json\n{\"x\": 1}\n```"
+    msg.content = '```json\n{"x": 1}\n```'
     inner.chat.completions.create.return_value.choices = [MagicMock(message=msg)]
     client = GrokClient(client=inner)
 
