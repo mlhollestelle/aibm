@@ -708,3 +708,44 @@ def test_plan_joint_activities_bad_json_raises_value_error() -> None:
             skims=[],
             client=_bad_json_client(),
         )
+
+
+# --- Phase 2b: validate parsed LLM data ---
+
+
+def test_allocate_vehicles_warns_on_unknown_agent_id(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """allocate_vehicles() logs a warning when LLM returns an unknown agent_id."""
+    alice = Agent(name="Alice", age=35, employment="employed", has_license=True)
+    bob = Agent(name="Bob", age=33, employment="employed", has_license=True)
+    hh = Household(members=[alice, bob], home_zone="z1", num_vehicles=1)
+
+    trip = Trip(origin="z1", destination="z2")
+    tour = Tour(trips=[trip], home_zone="z1")
+
+    mock = MagicMock()
+    mock.generate_json.return_value = json.dumps(
+        {
+            "allocations": [
+                {
+                    "agent_id": "nonexistent-id",
+                    "tour_idx": 0,
+                    "has_vehicle": True,
+                    "reasoning": "...",
+                }
+            ]
+        }
+    )
+
+    with caplog.at_level("WARNING"):
+        result, _ = hh.allocate_vehicles(
+            member_tours={alice.id: [tour], bob.id: [tour]},
+            skims=[],
+            client=mock,
+        )
+
+    # The unknown id is skipped — no crash
+    assert result[alice.id] == [False]
+    assert result[bob.id] == [False]
+    assert any("unknown" in msg for msg in caplog.messages)

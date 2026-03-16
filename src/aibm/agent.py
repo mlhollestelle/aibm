@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import math
 import random
 import uuid
@@ -26,6 +27,8 @@ from aibm.zone import Zone
 
 if TYPE_CHECKING:
     from aibm.household import Household
+
+_logger = logging.getLogger(__name__)
 
 _ACTIVITY_MIN_DURATIONS: dict[str, str] = {
     "work": "360–540 min (6–9 h)",
@@ -54,6 +57,27 @@ def _fmt_mins(mins: float) -> str:
     h = int(mins) // 60
     m = int(mins) % 60
     return f"{h:02d}:{m:02d}"
+
+
+def _check_time(value: float, field: str, context: str) -> float:
+    """Warn and clamp a time value to [0, 1440].
+
+    Args:
+        value: Time in minutes from midnight.
+        field: Human-readable field name (e.g. ``"start_time"``).
+        context: Caller context for the log message.
+
+    Returns:
+        The original value clamped to ``[0.0, 1440.0]``.
+    """
+    if value < 0 or value > 1440:
+        _logger.warning(
+            "%s: time value %g for '%s' is outside [0, 1440]; clamping to valid range",
+            context,
+            value,
+            field,
+        )
+    return max(0.0, min(1440.0, value))
 
 
 # Static few-shot example injected into the discretionary planning prompt.
@@ -290,7 +314,17 @@ class Agent:
                 f" JSON — {exc}. Response: {text[:200]!r}"
             ) from exc
         chosen_name: str = data["choice"]
-        chosen_option = next(opt for opt in options if opt.mode == chosen_name)
+        chosen_option = next((opt for opt in options if opt.mode == chosen_name), None)
+        if chosen_option is None:
+            fallback = min(options, key=lambda o: o.travel_time)
+            _logger.warning(
+                "choose_mode (agent %r): LLM returned unknown mode %r;"
+                " falling back to %r (lowest travel time)",
+                self.id,
+                chosen_name,
+                fallback.mode,
+            )
+            chosen_option = fallback
         return ModeChoice(option=chosen_option, reasoning=data["reasoning"]), prompt
 
     def choose_work_zone(
@@ -692,12 +726,32 @@ class Agent:
             chosen_id = raw_id
 
         poi_lookup = {p.id: p for p in (pois or [])}
+        zone_ids = {z.id for z in (candidates or [])}
         if chosen_id in poi_lookup:
             poi = poi_lookup[chosen_id]
             activity.poi_id = poi.id
             activity.location = poi.zone_id if poi.zone_id is not None else poi.id
-        else:
+        elif chosen_id in zone_ids:
             activity.location = chosen_id
+        else:
+            _logger.warning(
+                "choose_destination (agent %r): LLM returned destination %r"
+                " not in candidate set; using first available candidate",
+                self.id,
+                chosen_id,
+            )
+            if pois:
+                fallback_poi = pois[0]
+                activity.poi_id = fallback_poi.id
+                activity.location = (
+                    fallback_poi.zone_id
+                    if fallback_poi.zone_id is not None
+                    else fallback_poi.id
+                )
+            elif candidates:
+                activity.location = candidates[0].id
+            else:
+                activity.location = chosen_id
         return activity, prompt
 
     def schedule_activities(
@@ -816,10 +870,16 @@ class Agent:
                 f" JSON — {exc}. Response: {text[:200]!r}"
             ) from exc
 
+        ctx = f"schedule_activities(agent {self.id!r})"
         for i, item in enumerate(data["schedule"]):
             if i < len(activities):
-                activities[i].start_time = _parse_hhmm(item["start_time"])
-                activities[i].end_time = _parse_hhmm(item["end_time"])
+                act_type = activities[i].type
+                activities[i].start_time = _check_time(
+                    _parse_hhmm(item["start_time"]), f"{act_type}.start_time", ctx
+                )
+                activities[i].end_time = _check_time(
+                    _parse_hhmm(item["end_time"]), f"{act_type}.end_time", ctx
+                )
 
         sorted_activities = sorted(
             activities,
@@ -1118,8 +1178,17 @@ class Agent:
             else:
                 act.location = chosen_id
 
-            act.start_time = _parse_hhmm(item["start_time"])
-            act.end_time = _parse_hhmm(item["end_time"])
+            disc_ctx = f"plan_discretionary_activities(agent {self.id!r})"
+            act.start_time = _check_time(
+                _parse_hhmm(item["start_time"]),
+                f"{act_type}.start_time",
+                disc_ctx,
+            )
+            act.end_time = _check_time(
+                _parse_hhmm(item["end_time"]),
+                f"{act_type}.end_time",
+                disc_ctx,
+            )
 
         return discretionary, prompt
 
