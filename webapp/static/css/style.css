@@ -404,6 +404,17 @@ body {
   font-weight: 600;
 }
 
+#detail-area .timeline .tl-companion {
+  display: inline-block;
+  font-size: 10px;
+  font-style: italic;
+  padding: 1px 5px;
+  border-radius: 3px;
+  margin-left: 4px;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.07);
+}
+
 /* ── deck.gl canvas ──────────────────────────────── */
 #map-container canvas {
   outline: none;
