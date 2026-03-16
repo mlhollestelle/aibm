@@ -204,8 +204,14 @@ class DayPlan:
         for i in range(len(scheduled) - 1):
             cur = scheduled[i]
             nxt = scheduled[i + 1]
-            assert cur.end_time is not None
-            assert nxt.start_time is not None
+            if cur.end_time is None:
+                raise ValueError(
+                    f"Activity '{cur.type}' has no end_time; cannot check overlap"
+                )
+            if nxt.start_time is None:
+                raise ValueError(
+                    f"Activity '{nxt.type}' has no start_time; cannot check overlap"
+                )
             if cur.end_time > nxt.start_time:
                 warnings.append(f"Activities '{cur.type}' and '{nxt.type}' overlap")
 
