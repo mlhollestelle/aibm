@@ -927,8 +927,8 @@ class Agent:
         )
         timeline_lines = [f"  {_fmt_mins(360.0)}  Day starts — you are at home."]
         for act in sorted_mandatory:
-            assert act.start_time is not None
-            assert act.end_time is not None
+            if act.start_time is None or act.end_time is None:
+                continue
             act_label = act.type.replace("_", " ").capitalize()
             timeline_lines.append(f"  {_fmt_mins(act.start_time)}  {act_label} starts.")
             timeline_lines.append(f"  {_fmt_mins(act.end_time)}  {act_label} ends.")
@@ -1127,7 +1127,8 @@ class Agent:
         # Build location sequence: home → activities → home
         locations: list[str] = [self.home_zone]
         for act in day_plan.activities:
-            assert act.location is not None
+            if act.location is None:
+                raise ValueError(f"Activity '{act.type}' has no location")
             locations.append(act.location)
         locations.append(self.home_zone)
 
@@ -1139,7 +1140,8 @@ class Agent:
         travel_to_first = _min_travel(_skims, self.home_zone, first_act.location)
         times: list[float] = [(first_act.start_time or 0) - travel_to_first]
         for act in day_plan.activities:
-            assert act.end_time is not None
+            if act.end_time is None:
+                raise ValueError(f"Activity '{act.type}' has no end_time")
             times.append(act.end_time)
 
         # Create trips between consecutive locations
