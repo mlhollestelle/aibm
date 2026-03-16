@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import json
+import logging
 import uuid
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from aibm.activity import normalize_activity_type
-from aibm.agent import Agent, _fmt_mins, _parse_hhmm
+from aibm.agent import Agent, _check_time, _fmt_mins, _parse_hhmm
 from aibm.prompts import PromptConfig, StepPrompt, build_prompt
 
 if TYPE_CHECKING:
@@ -20,6 +21,9 @@ if TYPE_CHECKING:
     from aibm.poi import POI
     from aibm.skim import Skim
     from aibm.tour import Tour
+
+
+_logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -233,6 +237,14 @@ class Household:
             tidx = item["tour_idx"]
             if aid in result and 0 <= tidx < len(result[aid]):
                 result[aid][tidx] = item["has_vehicle"]
+            else:
+                _logger.warning(
+                    "allocate_vehicles (household %r): LLM returned unknown"
+                    " agent_id %r or tour_idx %d — skipping",
+                    self.id,
+                    aid,
+                    tidx,
+                )
 
         return result, prompt
 
@@ -631,12 +643,22 @@ class Household:
                 if p.zone_id is not None:
                     location = p.zone_id
 
+            joint_ctx = f"plan_joint_activities(household {self.id!r})"
+            act_type_str = normalize_activity_type(item["activity_type"])
             act = Act(
-                type=normalize_activity_type(item["activity_type"]),
+                type=act_type_str,
                 location=location,
                 poi_id=poi_id,
-                start_time=_parse_hhmm(item["start_time"]),
-                end_time=_parse_hhmm(item["end_time"]),
+                start_time=_check_time(
+                    _parse_hhmm(item["start_time"]),
+                    f"{act_type_str}.start_time",
+                    joint_ctx,
+                ),
+                end_time=_check_time(
+                    _parse_hhmm(item["end_time"]),
+                    f"{act_type_str}.end_time",
+                    joint_ctx,
+                ),
                 is_flexible=False,
                 is_joint=True,
             )
