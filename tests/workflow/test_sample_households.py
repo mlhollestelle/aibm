@@ -1,5 +1,9 @@
 """Tests for the household sampling function."""
 
+import pytest
+
+pytest.importorskip("pandas")
+
 import pandas as pd
 from sample_households import _sample_households
 

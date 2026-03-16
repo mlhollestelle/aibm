@@ -5,6 +5,9 @@ from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
+
+pytest.importorskip("pandas")
+
 from simulate import _simulate_agent
 
 from aibm import Agent, Household, Skim, Zone
