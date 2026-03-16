@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from aibm.activity import Activity
 from aibm.day_plan import DayPlan, TimeWindow, compute_time_windows
@@ -92,6 +93,19 @@ def test_validate_detects_long_work() -> None:
     )
     warnings = plan.validate()
     assert any("outside" in w for w in warnings)
+
+
+def test_validate_skips_activities_with_missing_times() -> None:
+    """Activities with no start_time or end_time are skipped by validate()."""
+    plan = DayPlan(
+        activities=[
+            Activity(type="work", start_time=480, end_time=None),
+            Activity(type="shopping", start_time=600, end_time=660),
+        ]
+    )
+    # No crash — the unscheduled activity is filtered out
+    warnings = plan.validate()
+    assert not any("work" in w and "overlap" in w for w in warnings)
 
 
 # --- compute_time_windows ---
