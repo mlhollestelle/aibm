@@ -259,6 +259,12 @@ def export_trips(
                 "arrival": round(arrival, 1),
                 "distance_km": distance_km,
                 "route": coords,
+                "joint_ride_id": (
+                    str(row["joint_ride_id"])
+                    if "joint_ride_id" in df.columns
+                    and pd.notna(row["joint_ride_id"])
+                    else None
+                ),
             }
         )
     with open(out_path, "w") as f:

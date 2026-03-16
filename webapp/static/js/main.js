@@ -12,6 +12,8 @@ let deckInstance = null;
 
 // Per-agent schedule: { agentId: { agent, trips, activities } }
 let agentSchedules = {};
+// Joint ride groups: { joint_ride_id: [agentId, ...] }
+let jointRideGroups = {};
 // Current frame positions (fed to layer)
 let agentPositions = [];
 // Selected agent for detail panel
@@ -52,6 +54,7 @@ function cumulativeDistances(route) {
  */
 function buildSchedules(agents, trips, activities) {
   agentSchedules = {};
+  jointRideGroups = {};
 
   // Index agents by id
   for (const a of agents) {
@@ -73,6 +76,13 @@ function buildSchedules(agents, trips, activities) {
       ...t,
       cumDists: cumulativeDistances(t.route),
     });
+    // Build joint ride group index
+    if (t.joint_ride_id) {
+      if (!jointRideGroups[t.joint_ride_id])
+        jointRideGroups[t.joint_ride_id] = [];
+      if (!jointRideGroups[t.joint_ride_id].includes(t.agent_id))
+        jointRideGroups[t.joint_ride_id].push(t.agent_id);
+    }
   }
 
   // Attach activities (sorted by start time)
@@ -147,6 +157,7 @@ function agentStateAt(sched, time) {
         status: "travelling",
         mode: trip.mode,
         mode_reasoning: trip.mode_reasoning || null,
+        joint_ride_id: trip.joint_ride_id || null,
         agent: agent,
       };
     }
@@ -226,12 +237,33 @@ function updateBubble(lon, lat, reasoning) {
 
 /**
  * Compute all agent positions for a given simulation time.
+ * Co-travelers on a joint ride are offset slightly so their dots
+ * remain visible as two overlapping circles.
  */
 function updatePositions(time) {
-  agentPositions = [];
+  const states = {};
   for (const id of Object.keys(agentSchedules)) {
-    agentPositions.push(agentStateAt(agentSchedules[id], time));
+    states[id] = agentStateAt(agentSchedules[id], time);
   }
+
+  // Apply a small lateral offset to joint-ride pairs so their dots
+  // appear as two overlapping circles rather than one.
+  const OFFSET = 0.00007; // ~7 m in WGS84 latitude degrees
+  const seen = new Set();
+  for (const state of Object.values(states)) {
+    const rid = state.joint_ride_id;
+    if (!rid || seen.has(rid)) continue;
+    seen.add(rid);
+    const members = (jointRideGroups[rid] || []).filter(
+      (mid) => states[mid]?.status === "travelling"
+    );
+    if (members.length < 2) continue;
+    for (let i = 0; i < members.length; i++) {
+      states[members[i]].lat += (i === 0 ? 1 : -1) * OFFSET * 0.5;
+    }
+  }
+
+  agentPositions = Object.values(states);
   if (selectedAgentId) {
     const sched = agentSchedules[selectedAgentId];
     if (sched) {
@@ -329,12 +361,18 @@ function renderDetailPanel(agentId) {
     });
   }
   for (const trip of sched.trips) {
+    const companions = trip.joint_ride_id
+      ? (jointRideGroups[trip.joint_ride_id] || [])
+          .filter((cid) => cid !== agentId)
+          .map((cid) => agentSchedules[cid]?.agent?.name || cid)
+      : [];
     events.push({
       time: trip.departure,
       end: trip.arrival,
       label: `${trip.origin_name || trip.origin} → ${trip.destination_name || trip.destination}`,
       kind: "trip",
       mode: trip.mode,
+      companions,
     });
   }
   events.sort((a, b) => a.time - b.time);
@@ -350,10 +388,15 @@ function renderDetailPanel(agentId) {
       ? ` <span class="tl-mode" style="background:` +
         modeColorHex(ev.mode) + `">${ev.mode}</span>`
       : "";
+    const companionTag =
+      ev.companions && ev.companions.length
+        ? ` <span class="tl-companion">with ${ev.companions.join(", ")}</span>`
+        : "";
     html += `<li class="${active}">`;
     html += `<span class="tl-time">${timeStr}</span>`;
     html += `<span class="tl-label">${ev.label}</span>`;
     html += modeTag;
+    html += companionTag;
     html += `</li>`;
   }
   html += `</ul>`;
