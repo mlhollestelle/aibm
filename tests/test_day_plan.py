@@ -1,5 +1,4 @@
 import numpy as np
-import pytest
 
 from aibm.activity import Activity
 from aibm.day_plan import DayPlan, TimeWindow, compute_time_windows

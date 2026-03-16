@@ -1448,3 +1448,56 @@ def test_plan_discretionary_bad_json_raises_value_error() -> None:
             skims=[],
             client=_bad_json_client(),
         )
+
+
+# --- Phase 2b: validate parsed LLM data ---
+
+
+def test_choose_mode_falls_back_on_unknown_mode(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """choose_mode() falls back to lowest-travel-time option when LLM returns
+    an unrecognised mode name."""
+    agent = Agent(name="Alice", age=35, home_zone="z1")
+    options = [
+        ModeOption(mode="car", travel_time=20.0),
+        ModeOption(mode="bike", travel_time=30.0),
+    ]
+    mock = MagicMock()
+    mock.generate_json.return_value = json.dumps(
+        {"reasoning": "I'll take the bus.", "choice": "bus"}
+    )
+    with caplog.at_level("WARNING"):
+        result, _ = agent.choose_mode(options, client=mock)
+
+    assert result.option.mode == "car"  # lowest travel time fallback
+    assert any("unknown mode" in msg for msg in caplog.messages)
+
+
+def test_choose_destination_falls_back_on_unknown_id(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """choose_destination() falls back to first POI when LLM returns an
+    unrecognised destination id."""
+    agent = Agent(name="Alice", age=35, home_zone="z1")
+    poi = POI(
+        id="p1",
+        name="Shop",
+        x=0.0,
+        y=0.0,
+        activity_type="shopping",
+        zone_id="z2",
+    )
+    activity = Activity(type="shopping")
+    mock = MagicMock()
+    mock.generate_json.return_value = json.dumps(
+        {"destination_id": "poi:does-not-exist", "reasoning": "..."}
+    )
+    with caplog.at_level("WARNING"):
+        result_act, _ = agent.choose_destination(
+            activity=activity, pois=[poi], client=mock
+        )
+
+    # Falls back to first POI candidate
+    assert result_act.location == "z2"
+    assert any("not in candidate set" in msg for msg in caplog.messages)
