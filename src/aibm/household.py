@@ -8,14 +8,15 @@ import uuid
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from aibm.activity import normalize_activity_type
+from aibm.activity import Activity, JointActivity, normalize_activity_type
 from aibm.agent import Agent, _check_time, _fmt_mins, _parse_hhmm
+from aibm.llm import create_client  # noqa: F401 — used at runtime
 from aibm.prompts import PromptConfig, StepPrompt, build_prompt
+from aibm.sampling import sample_destinations
 
 if TYPE_CHECKING:
     import random
 
-    from aibm.activity import Activity, JointActivity
     from aibm.day_plan import DayPlan
     from aibm.llm import LLMClient
     from aibm.poi import POI
@@ -139,8 +140,6 @@ class Household:
 
         # Need LLM to decide allocation.
         if client is None:
-            from aibm.llm import create_client
-
             client = create_client(model)
 
         # Build member summaries for the prompt.
@@ -310,8 +309,6 @@ class Household:
             return parent_plans, ""
 
         if client is None:
-            from aibm.llm import create_client
-
             client = create_client(model)
 
         member_lookup = {m.id: m for m in self.members}
@@ -403,8 +400,6 @@ class Household:
                 f" invalid JSON — {exc}. Response: {text[:200]!r}"
             ) from exc
 
-        from aibm.activity import Activity as Act
-
         # Process escort assignments.
         for item in data["escort_assignments"]:
             cid = item["child_id"]
@@ -436,10 +431,19 @@ class Household:
             if escort_time is None:
                 continue
 
-            escort_act = Act(
+            escort_start = escort_time - end_offset
+            if escort_start < 0:
+                _logger.warning(
+                    "plan_escort_trips(household %r): escort start "
+                    "%g is negative; clamping to 0",
+                    self.id,
+                    escort_start,
+                )
+                escort_start = 0.0
+            escort_act = Activity(
                 type="escort",
                 location=child_act.location,
-                start_time=escort_time - end_offset,
+                start_time=escort_start,
                 end_time=escort_time,
                 is_flexible=False,
             )
@@ -493,17 +497,11 @@ class Household:
         """
         import random as _random
 
-        from aibm.activity import Activity as Act
-        from aibm.activity import JointActivity
-        from aibm.sampling import sample_destinations
-
         # Fast path: single-person household.
         if self.size <= 1:
             return [], ""
 
         if client is None:
-            from aibm.llm import create_client
-
             client = create_client(model)
 
         if rng is None:
@@ -646,7 +644,7 @@ class Household:
 
             joint_ctx = f"plan_joint_activities(household {self.id!r})"
             act_type_str = normalize_activity_type(item["activity_type"])
-            act = Act(
+            act = Activity(
                 type=act_type_str,
                 location=location,
                 poi_id=poi_id,

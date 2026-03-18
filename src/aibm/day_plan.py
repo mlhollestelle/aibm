@@ -13,6 +13,14 @@ from aibm.trip import Trip
 if TYPE_CHECKING:
     from aibm.skim import Skim
 
+DEFAULT_DAY_START: float = 360.0  # 06:00
+DEFAULT_DAY_END: float = 1380.0  # 23:00
+WORK_DURATION_MIN: float = 240.0  # 4 hours
+WORK_DURATION_MAX: float = 600.0  # 10 hours
+SCHOOL_DURATION_MIN: float = 240.0  # 4 hours
+SCHOOL_DURATION_MAX: float = 480.0  # 8 hours
+EARLIEST_ACTIVITY: float = 240.0  # 04:00
+
 
 @dataclass
 class TimeWindow:
@@ -63,8 +71,8 @@ def compute_time_windows(
     mandatory_plan: DayPlan,
     skims: list[Skim],
     home_zone: str | None = None,
-    day_start: float = 360.0,
-    day_end: float = 1380.0,
+    day_start: float = DEFAULT_DAY_START,
+    day_end: float = DEFAULT_DAY_END,
 ) -> list[TimeWindow]:
     """Compute free time windows in an agent's day around mandatory activities.
 
@@ -194,6 +202,18 @@ class DayPlan:
                     f"Activity '{act.type}' has invalid end_time {act.end_time}"
                 )
 
+        # Check start before end
+        for act in self.activities:
+            if (
+                act.start_time is not None
+                and act.end_time is not None
+                and act.start_time > act.end_time
+            ):
+                warnings.append(
+                    f"Activity '{act.type}' ends before it starts "
+                    f"({act.start_time:.0f} > {act.end_time:.0f})"
+                )
+
         # Check for overlapping activities
         scheduled = [
             a
@@ -223,10 +243,36 @@ class DayPlan:
                 and act.end_time is not None
             ):
                 duration = act.end_time - act.start_time
-                if duration < 240 or duration > 600:
+                if duration < WORK_DURATION_MIN or duration > WORK_DURATION_MAX:
                     warnings.append(
                         f"Work duration {duration:.0f} min is outside 4–10 hour range"
                     )
+
+        # Check school duration (4–8 hours)
+        for act in self.activities:
+            if (
+                act.type == "school"
+                and act.start_time is not None
+                and act.end_time is not None
+            ):
+                duration = act.end_time - act.start_time
+                if duration < SCHOOL_DURATION_MIN or duration > SCHOOL_DURATION_MAX:
+                    warnings.append(
+                        f"School duration {duration:.0f} min is outside 4–8 hour range"
+                    )
+
+        # Check first/last activity time bounds
+        if scheduled:
+            first_start = scheduled[0].start_time
+            last_end = scheduled[-1].end_time
+            if first_start is not None and first_start < EARLIEST_ACTIVITY:
+                warnings.append(
+                    f"First activity starts at {first_start:.0f} min (before 04:00)"
+                )
+            if last_end is not None and last_end > 1440:
+                warnings.append(
+                    f"Last activity ends at {last_end:.0f} min (after midnight)"
+                )
 
         return warnings
 
