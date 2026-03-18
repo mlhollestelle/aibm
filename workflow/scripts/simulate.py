@@ -8,11 +8,13 @@ Usage:
     uv run python workflow/scripts/simulate.py
 """
 
+import json
 import logging
 import math
 import random
 import re
 import sys
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
@@ -216,10 +218,12 @@ def _build_agent_plan(
     if pc is None:
         pc = PromptConfig()
 
+    log.debug("Agent %s: generating persona", agent.id)
     _, prompt_persona = agent.generate_persona(client, household=hh, step=pc.persona)
 
     prompt_zone: str | None = None
     if agent.employment == "employed":
+        log.debug("Agent %s: choosing work zone", agent.id)
         candidates, travel_times = _sample_zones(
             agent.home_zone,
             all_zones,
@@ -236,6 +240,7 @@ def _build_agent_plan(
             )
 
     if agent.employment == "student":
+        log.debug("Agent %s: choosing school zone", agent.id)
         candidates, travel_times = _sample_zones(
             agent.home_zone,
             all_zones,
@@ -251,6 +256,7 @@ def _build_agent_plan(
                 step=pc.zone_choice,
             )
 
+    log.debug("Agent %s: generating activities", agent.id)
     activities, prompt_activities = agent.generate_activities(
         client, step=pc.activities
     )
@@ -258,6 +264,7 @@ def _build_agent_plan(
     mandatory = [a for a in activities if not a.is_flexible]
     discretionary = [a for a in activities if a.is_flexible]
 
+    log.debug("Agent %s: scheduling activities", agent.id)
     mandatory_plan, prompt_schedule = agent.schedule_activities(
         mandatory,
         client,
@@ -281,6 +288,7 @@ def _build_agent_plan(
     planned_disc: list[Activity] = []
     prompt_discretionary: str | None = None
     if disc_with_pois:
+        log.debug("Agent %s: planning discretionary", agent.id)
         planned_disc, prompt_discretionary = agent.plan_discretionary_activities(
             mandatory_plan.activities,
             disc_with_pois,
@@ -315,12 +323,28 @@ def _build_agent_plan(
         "prompt_vehicle_alloc": None,
         "prompt_escort": None,
         "prompt_joint": None,
+        "prompt_mode_choice": None,
+        "validation_warnings": None,
     }
 
     if not routable:
         return None, day_plan_row, []
 
     day_plan = DayPlan(activities=sorted(routable, key=lambda a: a.start_time or 0))
+
+    validation_warnings = day_plan.validate()
+    if validation_warnings:
+        log.warning(
+            "Agent %s (%s): %d validation issue(s): %s",
+            agent.id,
+            agent.name,
+            len(validation_warnings),
+            "; ".join(validation_warnings),
+        )
+    day_plan_row["validation_warnings"] = (
+        "; ".join(validation_warnings) if validation_warnings else None
+    )
+
     agent.build_tours(day_plan, skims=skims)
     day_plan_row["n_tours"] = len(day_plan.tours)
 
@@ -351,7 +375,7 @@ def _assign_modes(
     client: LLMClient,
     vehicle_access: list[bool] | None = None,
     pc: PromptConfig | None = None,
-) -> list[dict]:
+) -> tuple[list[dict], str | None]:
     """Run mode choice for each tour and return trip rows.
 
     Args:
@@ -366,11 +390,12 @@ def _assign_modes(
             when *None*.
 
     Returns:
-        A list of trip row dicts.
+        Tuple of (trip_rows, mode_choice_prompts).
     """
     if pc is None:
         pc = PromptConfig()
     trip_rows: list[dict] = []
+    mode_prompts: list[str] = []
     for tour_idx, tour in enumerate(day_plan.tours):
         mode_reasoning: str | None = None
         prompt_mode: str | None = None
@@ -399,6 +424,8 @@ def _assign_modes(
                     step=pc.mode_choice,
                 )
                 mode_reasoning = mc.reasoning
+                if prompt_mode:
+                    mode_prompts.append(prompt_mode)
 
         for trip_seq, trip in enumerate(tour.trips):
             trip_rows.append(
@@ -419,7 +446,8 @@ def _assign_modes(
                     "prompt_mode": prompt_mode,
                 }
             )
-    return trip_rows
+    combined_prompts = "\n---\n".join(mode_prompts) if mode_prompts else None
+    return trip_rows, combined_prompts
 
 
 def _assign_joint_ride_ids(
@@ -539,7 +567,7 @@ def _simulate_agent(
     if day_plan is None:
         return [], day_plan_row, []
 
-    trip_rows = _assign_modes(
+    trip_rows, mode_prompts = _assign_modes(
         agent,
         hh,
         day_plan,
@@ -548,6 +576,7 @@ def _simulate_agent(
         vehicle_access,
         pc=pc,
     )
+    day_plan_row["prompt_mode_choice"] = mode_prompts
     return trip_rows, day_plan_row, activity_rows
 
 
@@ -627,6 +656,7 @@ def _simulate_household(
                 pois_by_type[act_type] = type_pois
 
         if member_schedules and pois_by_type:
+            log.debug("Household %s: planning joint activities", hh.id)
             joint, prompt_joint = hh.plan_joint_activities(
                 member_schedules,
                 pois_by_type,
@@ -671,6 +701,7 @@ def _simulate_household(
                     parent_plans[agent.id] = day_plan
 
             if child_activities and parent_plans:
+                log.debug("Household %s: planning escort trips", hh.id)
                 parent_plans, prompt_escort = hh.plan_escort_trips(
                     child_activities,
                     parent_plans,
@@ -723,6 +754,7 @@ def _simulate_household(
 
     vehicle_alloc: dict[str, list[bool]] = {}
     if member_tours:
+        log.debug("Household %s: allocating vehicles", hh.id)
         vehicle_alloc, prompt_vehicle_alloc = hh.allocate_vehicles(
             member_tours,
             skims,
@@ -746,7 +778,7 @@ def _simulate_household(
             continue
 
         access = vehicle_alloc.get(agent.id)
-        trip_rows = _assign_modes(
+        trip_rows, mode_prompts = _assign_modes(
             agent,
             hh,
             day_plan,
@@ -755,6 +787,7 @@ def _simulate_household(
             access,
             pc=pc,
         )
+        day_plan_row["prompt_mode_choice"] = mode_prompts
         hh_trip_rows.extend(trip_rows)
 
     _assign_joint_ride_ids(hh_trip_rows, joint)
@@ -811,6 +844,13 @@ def simulate(cfg: dict, scenario: str = "baseline") -> None:
     households: list[Household] = []
     for hh_id, group in sample.groupby("household_id"):
         households.append(_reconstruct_household(int(str(hh_id)), group, model))
+
+    seed = sim.get("seed", 42)
+    random.seed(seed)
+    log.info(
+        "Random seed: %d (note: LLM responses remain non-deterministic)",
+        seed,
+    )
 
     n_agents = sum(hh.size for hh in households)
     max_workers = sim.get("max_workers", 4)
@@ -870,6 +910,31 @@ def simulate(cfg: dict, scenario: str = "baseline") -> None:
         len(trips_df),
         len(day_plans_df),
         len(activities_df),
+    )
+
+    # Aggregate validation stats.
+    warning_counts: Counter[str] = Counter()
+    n_warned = 0
+    for row in all_day_plan_rows:
+        w = row.get("validation_warnings")
+        if w:
+            n_warned += 1
+            for part in w.split("; "):
+                warning_counts[part] += 1
+
+    summary = {
+        "n_households": len(households),
+        "n_agents": len(all_day_plan_rows),
+        "n_with_warnings": n_warned,
+        "n_trips": len(all_trip_rows),
+        "warning_counts": dict(warning_counts.most_common()),
+    }
+    summary_path = out_dir / f"{name}_validation_summary_{scenario}.json"
+    summary_path.write_text(json.dumps(summary, indent=2))
+    log.info(
+        "Validation summary: %d/%d agents had warnings",
+        n_warned,
+        len(all_day_plan_rows),
     )
 
 

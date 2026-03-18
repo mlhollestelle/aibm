@@ -1,0 +1,22 @@
+# Prompt override: encourage distance-appropriate mode choices.
+#
+# The Netherlands has very high cycling rates. Mode choice should
+# reflect typical Dutch travel behaviour and distance thresholds.
+
+prompts:
+  mode_choice:
+    instructions: |
+      Pick exactly one mode from the options above.
+
+      Distance-appropriate mode guidance for the Netherlands:
+      - Walking is typical for trips under 3 km.
+      - Cycling is very common for trips under 10 km (the Netherlands
+        has the highest cycling rate in Europe).
+      - Car is used mainly for longer trips (> 10 km) or when carrying
+        heavy loads.
+      - Transit is used for medium-to-long distances, especially by
+        people without a car or licence.
+
+      Respond with:
+      - "reasoning": a short personal explanation (2-3 sentences).
+      - "choice": the mode name exactly as listed above.

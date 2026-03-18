@@ -1,6 +1,17 @@
 # aibm
 
+An agent-based travel demand model that replaces traditional discrete
+choice models (logit, nested logit) with LLM prompts. Each synthetic
+agent is given a persona and asked — via structured LLM calls — to
+choose a work/school location, generate activities, schedule them,
+pick destinations, and select travel modes. The result is a full set
+of daily trip chains that can be assigned to a road network.
+
 ## Prerequisites
+
+- Python 3.12+
+- [uv](https://docs.astral.sh/uv/) package manager
+- An API key for at least one supported LLM provider
 
 This project uses LLMs to power agent decisions. It supports four providers:
 
@@ -47,7 +58,20 @@ agent = Agent(name="Alice", model="gpt-4o")
 agent = Agent(name="Alice", model="grok-4-1")
 ```
 
-## Get started
+## Quick start
+
+```sh
+# Install all dependencies (package + pipeline + dev tools)
+uv sync --group pipeline
+
+# Set your API key
+export OPENAI_API_KEY=your_key_here
+
+# Run the full pipeline (download data, synthesize population, simulate, assign)
+uv run snakemake --cores 1 -s workflow/Snakefile
+```
+
+## Development setup
 
 Install the package in editable mode with dev tools:
 
@@ -66,6 +90,22 @@ Run a script:
 ```sh
 uv run python scripts/example.py
 ```
+
+## LLM costs
+
+Rough estimates for simulating 200 households (~500 agents) on the
+Walcheren example model:
+
+| Model | Approximate cost | Notes |
+|-------|-----------------|-------|
+| `gpt-4o-mini` | ~$0.50–1.00 | Recommended for development |
+| `gemini-2.5-flash-lite` | ~$0.30–0.80 | Good budget option |
+| `gpt-4o` | ~$5–10 | Higher quality, much more expensive |
+| `claude-sonnet-4-20250514` | ~$5–10 | Similar to gpt-4o |
+
+Costs depend on prompt complexity and number of discretionary activities
+generated. The `n_households` setting in `workflow/config.yaml` controls
+sample size.
 
 ## Notebooks
 
@@ -96,6 +136,30 @@ Activate pre-commit hooks (runs ruff automatically on every `git commit`):
 
 ```sh
 uv run pre-commit install
+```
+
+## Architecture
+
+```mermaid
+flowchart TD
+    A[Population Synthesis] --> B[Per Household]
+
+    subgraph B[Per Household]
+        direction TB
+        subgraph C[Per Agent]
+            C1[Persona Generation] --> C2[Zone Choice<br/>work / school]
+            C2 --> C3[Activity Generation]
+            C3 --> C4[Schedule Activities]
+            C4 --> C5[Plan Discretionary]
+        end
+        C5 --> D[Joint Activities]
+        D --> E[Escort Trips]
+        E --> F[Vehicle Allocation]
+        F --> G[Build Tours]
+        G --> H[Mode Choice]
+    end
+
+    H --> I[Network Assignment]
 ```
 
 ## Example model

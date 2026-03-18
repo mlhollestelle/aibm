@@ -23,6 +23,34 @@ def test_parse_hhmm() -> None:
     assert _parse_hhmm("2023-10-21T10:30:00") == 630.0
 
 
+def test_parse_hhmm_24_00() -> None:
+    assert _parse_hhmm("24:00") == 1440.0
+
+
+def test_parse_hhmm_rejects_hour_25() -> None:
+    with pytest.raises(ValueError, match="hours=25"):
+        _parse_hhmm("25:00")
+
+
+def test_parse_hhmm_rejects_minute_60() -> None:
+    with pytest.raises(ValueError, match="minutes=60"):
+        _parse_hhmm("08:60")
+
+
+def test_parse_hhmm_rejects_non_numeric() -> None:
+    with pytest.raises(ValueError, match="non-numeric"):
+        _parse_hhmm("abc:def")
+
+
+def test_parse_hhmm_rejects_empty() -> None:
+    with pytest.raises(ValueError, match="empty"):
+        _parse_hhmm("")
+
+
+def test_parse_hhmm_single_digit() -> None:
+    assert _parse_hhmm("8:5") == 485.0
+
+
 def test_fmt_mins() -> None:
     assert _fmt_mins(480.0) == "08:00"
     assert _fmt_mins(1050.0) == "17:30"
@@ -973,6 +1001,45 @@ def test_build_tours_first_departure_accounts_for_travel_time() -> None:
     assert first_trip.departure_time == 480 - 30  # leaves at 07:30
     # Activity itself is unchanged
     assert result.activities[0].start_time == 480
+
+
+def test_build_tours_midnight_start() -> None:
+    """Activity starting at 0.0 (midnight) produces departure_time >= 0."""
+    agent = Agent(name="Nils", age=30, employment="employed", home_zone="h")
+    plan = DayPlan(
+        activities=[
+            Activity(
+                type="work",
+                location="w",
+                start_time=0.0,
+                end_time=480.0,
+            ),
+        ]
+    )
+    result = agent.build_tours(plan)
+    first_trip = result.tours[0].trips[0]
+    assert first_trip.departure_time >= 0.0
+
+
+def test_build_tours_clamps_negative_departure() -> None:
+    """Departure earlier than midnight is clamped to 0."""
+    mock_skim = MagicMock(spec=Skim)
+    mock_skim.travel_time.return_value = 20.0  # 20 min travel
+
+    agent = Agent(name="Kees", age=30, employment="employed", home_zone="h")
+    plan = DayPlan(
+        activities=[
+            Activity(
+                type="work",
+                location="w",
+                start_time=5.0,  # 00:05
+                end_time=480.0,
+            ),
+        ]
+    )
+    result = agent.build_tours(plan, skims=[mock_skim])
+    first_trip = result.tours[0].trips[0]
+    assert first_trip.departure_time == 0.0
 
 
 def test_schedule_activities_travel_times_in_prompt() -> None:

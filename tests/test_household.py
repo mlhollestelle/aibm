@@ -472,6 +472,73 @@ def test_plan_escort_trips_pickup() -> None:
     assert escort_acts[0].location == "z_school"
 
 
+def test_plan_escort_trips_clamps_negative_start() -> None:
+    """Escort start_time is clamped to 0 when it would be negative."""
+    dad = Agent(
+        name="Dad",
+        age=40,
+        has_license=True,
+        employment="employed",
+        home_zone="z1",
+    )
+    kid = Agent(
+        name="Kid",
+        age=8,
+        employment="student",
+        home_zone="z1",
+    )
+    hh = Household(
+        members=[dad, kid],
+        home_zone="z1",
+        num_vehicles=1,
+    )
+
+    # Child's school starts at 10 min → escort_start = 10 - 15 = -5
+    school_act = Activity(
+        type="school",
+        location="z_school",
+        start_time=10.0,
+        end_time=480.0,
+        is_flexible=False,
+    )
+
+    work_act = Activity(
+        type="work",
+        location="z_work",
+        start_time=510,
+        end_time=1020,
+        is_flexible=False,
+    )
+    dad_plan = DayPlan(activities=[work_act])
+    dad.build_tours(dad_plan)
+
+    mock_client = MagicMock()
+    mock_client.generate_json.return_value = json.dumps(
+        {
+            "escort_assignments": [
+                {
+                    "child_id": kid.id,
+                    "escort_id": dad.id,
+                    "trip_type": "dropoff",
+                    "reasoning": "Dad drops off.",
+                },
+            ]
+        }
+    )
+
+    result, _ = hh.plan_escort_trips(
+        child_activities={kid.id: [school_act]},
+        parent_plans={dad.id: dad_plan},
+        skims=[],
+        client=mock_client,
+    )
+
+    updated_plan = result[dad.id]
+    escort_acts = [a for a in updated_plan.activities if a.type == "escort"]
+    assert len(escort_acts) == 1
+    assert escort_acts[0].start_time == 0.0  # clamped, not -5.0
+
+
 def test_child_trip_mode() -> None:
     """Child's escort trip should have escort_agent_id set on Trip."""
     # escort_agent_id is a field on Trip, verified here.

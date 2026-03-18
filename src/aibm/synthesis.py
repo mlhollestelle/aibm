@@ -8,6 +8,10 @@ from dataclasses import dataclass, field
 from aibm.agent import Agent
 from aibm.household import Household
 
+_SCHOOL_AGE_MIN = 4
+_ADULT_STUDENT_AGE_MAX = 29
+_OLDER_STUDENT_RATE_FACTOR = 0.1
+
 
 @dataclass
 class ZoneSpec:
@@ -79,10 +83,14 @@ def _derive_employment(
     is scaled down by 0.1 for ages 30-64.
     """
     if bracket == "0-17":
-        return "student" if age >= 4 else "unemployed"
+        return "student" if age >= _SCHOOL_AGE_MIN else "unemployed"
     if bracket == "65+":
         return "retired"
-    effective_student_rate = student_rate if age <= 29 else student_rate * 0.1
+    effective_student_rate = (
+        student_rate
+        if age <= _ADULT_STUDENT_AGE_MAX
+        else student_rate * _OLDER_STUDENT_RATE_FACTOR
+    )
     roll = rng.random()
     if roll < employment_rate:
         return "employed"
