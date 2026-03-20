@@ -45,11 +45,36 @@ def _parse_hhmm(value: str) -> float:
     """Parse a time string to minutes from midnight.
 
     Accepts HH:MM, HH:MM:SS, or ISO 8601 datetime (the time part is used).
+    Validates that hours are 0–24, minutes 0–59, and the total does not
+    exceed 1440 (24:00 is accepted as end-of-day).
+
+    Raises:
+        ValueError: If *value* is empty, not numeric, or out of bounds.
     """
+    if not value or not value.strip():
+        raise ValueError(f"Cannot parse time '{value}': empty string")
     if "T" in value:
         value = value.split("T", 1)[1]
-    h, m, *_ = value.split(":")
-    return int(h) * 60 + int(m)
+    parts = value.split(":")
+    if len(parts) < 2:
+        raise ValueError(f"Cannot parse time '{value}': expected HH:MM format")
+    h_str, m_str = parts[0], parts[1]
+    try:
+        hours = int(h_str)
+    except ValueError:
+        raise ValueError(f"Cannot parse time '{value}': non-numeric hours")
+    try:
+        minutes = int(m_str)
+    except ValueError:
+        raise ValueError(f"Cannot parse time '{value}': non-numeric minutes")
+    if hours < 0 or hours > 24:
+        raise ValueError(f"Cannot parse time '{value}': hours={hours} outside 0–24")
+    if minutes < 0 or minutes > 59:
+        raise ValueError(f"Cannot parse time '{value}': minutes={minutes} outside 0–59")
+    if hours == 24 and minutes != 0:
+        raise ValueError(f"Cannot parse time '{value}': 24:xx requires minutes=0")
+    total = hours * 60 + minutes
+    return float(total)
 
 
 def _fmt_mins(mins: float) -> str:
@@ -1250,7 +1275,18 @@ class Agent:
         _skims = skims or []
         first_act = day_plan.activities[0]
         travel_to_first = _min_travel(_skims, self.home_zone, first_act.location)
-        times: list[float] = [(first_act.start_time or 0) - travel_to_first]
+        raw_departure = (first_act.start_time or 0) - travel_to_first
+        if raw_departure < 0:
+            _logger.warning(
+                "build_tours(agent %r): departure %g min is negative"
+                " (start=%s, travel=%g); clamping to 0",
+                self.id,
+                raw_departure,
+                first_act.start_time,
+                travel_to_first,
+            )
+            raw_departure = 0.0
+        times: list[float] = [raw_departure]
         for act in day_plan.activities:
             if act.end_time is None:
                 raise ValueError(f"Activity '{act.type}' has no end_time")

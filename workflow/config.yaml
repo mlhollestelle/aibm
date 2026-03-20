@@ -39,11 +39,21 @@ synthesis:
   seed: 42
 
 simulation:
+  # Number of households to simulate. 200 ≈ 10-15 min with gpt-4o-mini.
   n_households: 200
+  # Random seed for zone sampling. LLM responses remain non-deterministic.
   seed: 42
+  # LLM model ID. Provider is auto-detected from prefix:
+  #   gpt-*/o1/o3 → OpenAI, claude-* → Anthropic,
+  #   grok-* → xAI, else → Gemini.
   model: "gpt-4o-mini"
+  # Max LLM requests per minute. Match to your API tier to avoid 429s.
   rate_limit_rpm: 500
+  # Zones offered per work/school choice. Higher = better quality but
+  # more tokens per call. 10-15 is a good range.
   n_zone_candidates: 12
+  # Concurrent households in the thread pool. Higher = faster but more
+  # API pressure. Keep ≤ rate_limit_rpm / 10.
   max_workers: 4
   # ── Prompt overrides (optional) ──────────────────────────────
   #

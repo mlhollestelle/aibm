@@ -107,6 +107,107 @@ def test_validate_skips_activities_with_missing_times() -> None:
     assert not any("work" in w and "overlap" in w for w in warnings)
 
 
+def test_validate_detects_backwards_times() -> None:
+    """Activity with start_time > end_time produces a warning."""
+    plan = DayPlan(
+        activities=[
+            Activity(type="work", start_time=1020, end_time=480),
+        ]
+    )
+    warnings = plan.validate()
+    assert any("ends before it starts" in w for w in warnings)
+
+
+def test_validate_time_boundary_1440() -> None:
+    """end_time=1440 (midnight) should not trigger invalid time warning."""
+    plan = DayPlan(
+        activities=[
+            Activity(type="work", start_time=480, end_time=1440),
+        ]
+    )
+    warnings = plan.validate()
+    assert not any("invalid" in w for w in warnings)
+
+
+def test_validate_zero_duration_work() -> None:
+    """Work with start == end produces an 'outside range' warning."""
+    plan = DayPlan(
+        activities=[
+            Activity(type="work", start_time=480, end_time=480),
+        ]
+    )
+    warnings = plan.validate()
+    assert any("outside" in w for w in warnings)
+
+
+def test_validate_adjacent_no_overlap() -> None:
+    """First ends at 600, second starts at 600 → no overlap warning."""
+    plan = DayPlan(
+        activities=[
+            Activity(type="work", start_time=480, end_time=600),
+            Activity(type="shopping", start_time=600, end_time=660),
+        ]
+    )
+    warnings = plan.validate()
+    assert not any("overlap" in w for w in warnings)
+
+
+def test_validate_multiple_issues() -> None:
+    """Plan with invalid time + overlap produces >= 2 warnings."""
+    plan = DayPlan(
+        activities=[
+            Activity(type="work", start_time=-10, end_time=600),
+            Activity(type="shopping", start_time=590, end_time=660),
+        ]
+    )
+    warnings = plan.validate()
+    assert len(warnings) >= 2
+
+
+def test_validate_school_duration_short() -> None:
+    """School shorter than 4 hours produces warning."""
+    plan = DayPlan(
+        activities=[
+            Activity(type="school", start_time=480, end_time=600),
+        ]
+    )
+    warnings = plan.validate()
+    assert any("School duration" in w for w in warnings)
+
+
+def test_validate_school_duration_long() -> None:
+    """School longer than 8 hours produces warning."""
+    plan = DayPlan(
+        activities=[
+            Activity(type="school", start_time=480, end_time=1020),
+        ]
+    )
+    warnings = plan.validate()
+    assert any("School duration" in w for w in warnings)
+
+
+def test_validate_early_first_activity() -> None:
+    """First activity before 04:00 produces warning."""
+    plan = DayPlan(
+        activities=[
+            Activity(type="work", start_time=180, end_time=720),
+        ]
+    )
+    warnings = plan.validate()
+    assert any("before 04:00" in w for w in warnings)
+
+
+def test_validate_late_last_activity() -> None:
+    """Last activity ending after midnight produces warning."""
+    plan = DayPlan(
+        activities=[
+            Activity(type="work", start_time=480, end_time=1500),
+        ]
+    )
+    warnings = plan.validate()
+    assert any("after midnight" in w for w in warnings)
+
+
 # --- compute_time_windows ---
 
 
