@@ -129,6 +129,34 @@ def test_agent_student_demographics() -> None:
     assert agent.work_zone is None
 
 
+def test_background_uses_zone_name_when_set() -> None:
+    agent = Agent(
+        name="Dave",
+        employment="employed",
+        home_zone="E123N456",
+        home_zone_name="Middelburg",
+        work_zone="E130N460",
+        work_zone_name="Vlissingen",
+    )
+    bg = agent._build_background()
+    assert "Home zone: Middelburg" in bg
+    assert "Work zone: Vlissingen" in bg
+    assert "E123N456" not in bg
+    assert "E130N460" not in bg
+
+
+def test_background_falls_back_to_zone_id_when_name_absent() -> None:
+    agent = Agent(
+        name="Eve",
+        employment="employed",
+        home_zone="E123N456",
+        school_zone="E130N460",
+    )
+    bg = agent._build_background()
+    assert "Home zone: E123N456" in bg
+    assert "School zone: E130N460" in bg
+
+
 # --- generate persona ---
 
 
