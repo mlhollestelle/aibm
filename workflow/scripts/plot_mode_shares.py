@@ -17,6 +17,14 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 
+# Matches MODE_COLORS in webapp/static/js/layers.js
+MODE_COLORS: dict[str, str] = {
+    "car": "#2d72d2",
+    "bike": "#29a634",
+    "transit": "#d1980b",
+    "walk": "#cd4246",
+}
+
 sys.path.insert(0, str(Path(__file__).parent))
 
 # isort: split
@@ -74,13 +82,14 @@ def plot_mode_share(mode_share: pd.DataFrame, output: Path) -> None:
     fig, ax = plt.subplots(figsize=(10, 4))
     sns.barplot(
         data=mode_share,
-        x="mode",
+        x="scenario",
         y="share",
-        hue="scenario",
+        hue="mode",
+        palette=MODE_COLORS,
         ax=ax,
     )
     ax.set_title("Mode share by scenario")
-    ax.set_xlabel("Mode")
+    ax.set_xlabel("Scenario")
     ax.set_ylabel("Share (%)")
     ax.legend(
         title="Scenario",
