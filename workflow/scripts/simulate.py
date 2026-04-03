@@ -942,6 +942,6 @@ if __name__ == "__main__":
     import argparse
 
     _parser = argparse.ArgumentParser(add_help=False)
-    _parser.add_argument("--scenario", default="baseline")
+    _parser.add_argument("--scenario", default="gpt_4o_mini")
     _args, _ = _parser.parse_known_args()
     simulate(load_config(), scenario=_args.scenario)

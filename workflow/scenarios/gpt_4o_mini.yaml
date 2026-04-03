@@ -1,0 +1,8 @@
+# Scenario using gpt-4o-mini.
+simulation:
+  model: gpt-4o-mini
+  rate_limit_rpm: 500   # requests per minute; override per model/tier
+#   prompts:
+#     persona:
+#       role: |
+#         ...
