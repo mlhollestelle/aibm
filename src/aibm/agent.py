@@ -178,8 +178,11 @@ class Agent:
     employment: str = "unemployed"
     has_license: bool = False
     home_zone: str | None = None
+    home_zone_name: str | None = None
     work_zone: str | None = None
+    work_zone_name: str | None = None
     school_zone: str | None = None
+    school_zone_name: str | None = None
     persona: str | None = None
 
     def __repr__(self) -> str:
@@ -193,11 +196,11 @@ class Agent:
         lines.append(f"Employment: {self.employment}")
         lines.append(f"Has driving licence: {'yes' if self.has_license else 'no'}")
         if self.home_zone:
-            lines.append(f"Home zone: {self.home_zone}")
+            lines.append(f"Home zone: {self.home_zone_name or self.home_zone}")
         if self.work_zone:
-            lines.append(f"Work zone: {self.work_zone}")
+            lines.append(f"Work zone: {self.work_zone_name or self.work_zone}")
         if self.school_zone:
-            lines.append(f"School zone: {self.school_zone}")
+            lines.append(f"School zone: {self.school_zone_name or self.school_zone}")
         if self.persona:
             lines.append(f"Persona: {self.persona}")
         if household is not None:
@@ -494,10 +497,18 @@ class Agent:
         chosen_id: str = data["zone_id"]
         reasoning: str = data.get("reasoning", "")
 
+        zone_lookup = {z.id: z for z in zones}
+        chosen_zone = zone_lookup.get(chosen_id)
+        chosen_name = (
+            chosen_zone.name if chosen_zone and chosen_zone.name != chosen_id else None
+        )
+
         if purpose == "work":
             self.work_zone = chosen_id
+            self.work_zone_name = chosen_name
         else:
             self.school_zone = chosen_id
+            self.school_zone_name = chosen_name
         return chosen_id, reasoning, prompt
 
     def generate_activities(

@@ -92,15 +92,22 @@ def _zone_poi_counts(pois: list, activity_types: set[str]) -> dict[str, int]:
     return counts
 
 
-def _reconstruct_household(hh_id: int, group: pd.DataFrame, model: str) -> Household:
+def _reconstruct_household(
+    hh_id: int,
+    group: pd.DataFrame,
+    model: str,
+    zone_name_lookup: dict[str, str] | None = None,
+) -> Household:
     """Rebuild a Household and its Agents from a parquet row group."""
     first = group.iloc[0]
+    home_zone_id = str(first["home_zone"])
     hh = Household(
         id=str(hh_id),
-        home_zone=str(first["home_zone"]),
+        home_zone=home_zone_id,
         num_vehicles=int(first["num_vehicles"]),
         income_level=str(first["income_level"]),
     )
+    home_zone_name = (zone_name_lookup or {}).get(home_zone_id)
     for _, row in group.iterrows():
         agent = Agent(
             name=str(row["agent_name"]),
@@ -109,6 +116,7 @@ def _reconstruct_household(hh_id: int, group: pd.DataFrame, model: str) -> House
             has_license=bool(row["has_license"]),
             model=model,
         )
+        agent.home_zone_name = home_zone_name
         hh.add_member(agent)
     return hh
 
@@ -840,10 +848,14 @@ def simulate(cfg: dict, scenario: str = "baseline") -> None:
     all_day_plan_rows: list[dict] = []
     all_activity_rows: list[dict] = []
 
+    zone_name_lookup = {z.id: z.name for z in all_zones if z.name != z.id}
+
     # Build households up front.
     households: list[Household] = []
     for hh_id, group in sample.groupby("household_id"):
-        households.append(_reconstruct_household(int(str(hh_id)), group, model))
+        households.append(
+            _reconstruct_household(int(str(hh_id)), group, model, zone_name_lookup)
+        )
 
     seed = sim.get("seed", 42)
     random.seed(seed)
