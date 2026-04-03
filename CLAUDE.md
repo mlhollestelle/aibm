@@ -1,19 +1,19 @@
 # CLAUDE.md
 
-This project is a work in progress where someone not experienced with Python builds an agent-based travel demand model approach with LLMs plus aweb app to show the results.
+This project is an agent-based travel demand model approach with LLMs plus a web app to show the results.
 
 ## General
 
 * This projects is aimed to build a simple-medium advanced ABM that uses LLMs with prompts instead of other statistical models.
 * The model results are then to be displayed in a webapp that shows how the agents travel in the model area.
+* The model uses Snakemake to run the model pipeline.
 
 ## During development
 
-* Guide the developer through python best practices.
-* Explain new concepts to the developer through concepts in R — in chat messages only. Never put R references, R analogies, or R terminology in source code, docstrings, comments, or any committed file.
-* Do not generate large amounts of it at once, so that the developer can follow and learn
-* Make sure best practices are followed.
+* Do not generate large amounts of code at once, but break steps down in atomic steps
+* Make sure best practices are followed/promote best practices.
 * `workflow/scripts/simulate.py` and `notebooks/simulate_walkthrough.ipynb` mirror each other, where the latter is to sanity check and validate the simulations step-by-step. Changes in simulate.py should also be reflected in simulate_walkthrough.ipynb whenever relevant.
+* Consult the travel-demand-expert.md agent when doing steps which require theoretical input regarding transport modelling.
 
 ## Python
 
@@ -30,39 +30,10 @@ This project is a work in progress where someone not experienced with Python bui
 aibm/
 ├── src/
 │   ├── aibm/                  # Main package: the ABM core
-│   │   ├── agent.py           # Agent class (one person in the model)
-│   │   ├── household.py       # Household class (group of agents)
-│   │   ├── zone.py            # Zone class (geographic unit / TAZ)
-│   │   ├── activity.py        # Activity types and data
-│   │   ├── trip.py            # Trip between two locations
-│   │   ├── tour.py            # Tour (chain of trips from/to home)
-│   │   ├── day_plan.py        # Full-day activity schedule for an agent
-│   │   ├── synthesis.py       # Population synthesis (create agents from specs)
-│   │   ├── llm.py             # LLM client wrappers (Anthropic, Gemini, OpenAI)
-│   │   ├── poi.py             # Points of Interest class and loaders
-│   │   ├── sampling.py        # Destination sampling utilities
-│   │   ├── skim.py            # Travel-time matrix wrapper
-│   │   └── __init__.py        # Public API exports
-│   └── synth_pop/             # Synthetic population helpers (WIP)
 ├── workflow/                  # Snakemake pipeline for the Walcheren example model
 │   ├── Snakefile              # Pipeline definition and rules
 │   ├── config.yaml            # Pipeline configuration (study area, network, simulation)
 │   └── scripts/               # One script per pipeline step
-│       ├── _config.py              # Shared --config flag loader
-│       ├── download_boundaries.py  # Download study area boundary
-│       ├── download_network.py     # Download OSM road network
-│       ├── clean_grid.py           # Clean CBS grid data
-│       ├── filter_grid.py          # Filter grid to study area
-│       ├── build_specs.py          # Build zone specs from grid
-│       ├── synthesize.py           # Run population synthesis
-│       ├── sample_households.py    # Sample households for simulation
-│       ├── build_skim.py           # Compute travel time skim matrix
-│       ├── download_transit.py     # Download transit routes via Overpass API
-│       ├── build_transit_skim.py   # Build transit travel-time skim matrix
-│       ├── export_network.py       # Export network as GeoParquet
-│       ├── fetch_pois.py           # Fetch POIs from OSM
-│       ├── simulate.py             # Run LLM-based day-plan simulation
-│       └── assign_network.py       # All-or-nothing network assignment
 ├── tests/                     # pytest test suite (mirrors src/aibm/)
 ├── notebooks/                 # Jupyter notebooks for exploration
 ├── scripts/                   # Ad-hoc development and experiment scripts
@@ -77,30 +48,15 @@ aibm/
 
 ## Web App
 
-The web app lives in `webapp/` and visualises simulation results on an interactive map.
-
-**Deployment:** Fully static — hosted on Cloudflare Pages (`webapp/static/` is the
-build output directory). No server to maintain.
-
-**Frontend (vanilla JS, no framework):**
-* MapLibre GL JS v4.7.1 — base map rendering
-* deck.gl v9.1.4 — agent/route data layers (ScatterplotLayer, PathLayer)
-* marked.js v12 — renders the about page from Markdown
-* CartoDB Dark Matter — basemap style
-* Inter — UI font (Google Fonts)
-
-**Key files:**
-* `webapp/prepare_data.py` — converts pipeline parquet output to JSON for the browser
-* `webapp/static/index.html` — single-page app shell
-* `webapp/static/config.json` — social links config (edit directly)
-* `webapp/static/content/about.md` — about page content
-* `webapp/static/js/main.js` — data loading, schedule building, animation loop
-* `webapp/static/js/layers.js` — deck.gl layer factories
-* `webapp/static/js/animation.js` — playback controls (play/pause, speed, time slider)
-* `webapp/static/js/panels.js` — KPI and agent detail side panel
-* `webapp/static/js/about.js` — about overlay (fetches and renders about.md)
-* `webapp/static/data/` — pre-built JSON files served to the browser
-* `webapp/content/` — source config.yaml (kept for reference; not served)
+* The web app lives in `webapp/` and visualises simulation results on an interactive map.
+* App if ully static and hosted on Cloudflare Pages (`webapp/static/` is the build output directory). No server to maintain.
+* Stack:
+  * Frontend (vanilla JS, no framework),
+  * MapLibre for basemap,
+  * deck.gl v9.1.4 — agent/route data layers (ScatterplotLayer, PathLayer)
+  * marked.js v12 — renders the about page from Markdown
+  * CartoDB Dark Matter — basemap style
+  * Inter — UI font (Google Fonts)
 
 ## Workflow / example model
 
