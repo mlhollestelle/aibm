@@ -1,0 +1,4 @@
+# gpt-4o-mini with a different random seed.
+simulation:
+  model: gpt-4o-mini
+  seed: 99

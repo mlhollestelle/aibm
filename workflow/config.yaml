@@ -211,9 +211,9 @@ simulation:
   #       and which members participate.
 
 scenarios:
-  - baseline
-  - baseline_seed2
-  - baseline_haiku
+  - gpt_4o_mini
+  - gpt_4o_mini_seed2
+  - claude_haiku_4_5
   - grok_4_1_fast_non_reasoning
   - grok_4_1_fast_reasoning
 
