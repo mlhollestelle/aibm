@@ -58,6 +58,18 @@ aibm/
   * CartoDB Dark Matter — basemap style
   * Inter — UI font (Google Fonts)
 
+### Mode colours
+
+Defined in `webapp/static/js/layers.js` (`MODE_COLORS`). Use these everywhere
+(plots, diagrams, docs) so colours are consistent across the webapp and figures:
+
+| Mode    | Hex       | RGB             |
+|---------|-----------|-----------------|
+| car     | `#2d72d2` | 45, 114, 210    |
+| bike    | `#29a634` | 41, 166, 52     |
+| transit | `#d1980b` | 209, 152, 11    |
+| walk    | `#cd4246` | 205, 66, 70     |
+
 ## Workflow / example model
 
 * The `workflow/` directory contains Snakemake pipeline scripts
