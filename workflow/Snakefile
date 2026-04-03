@@ -34,6 +34,7 @@ rule all:
             NAME=NAME,
             scenario=SCENARIOS,
         ),
+        f"data/processed/{NAME}_mode_shares.png",
         *([f"data/processed/{NAME}_transit_stops.graphml",
            f"data/processed/{NAME}_skim_transit.omx"] if TRANSIT else []),
 
@@ -200,6 +201,21 @@ rule assign_network:
         "uv run python workflow/scripts/assign_network.py"
         " --config workflow/config.yaml"
         " --scenario {wildcards.scenario}"
+
+
+rule plot_mode_shares:
+    input:
+        expand(
+            "data/processed/{NAME}_assigned_trips_{scenario}.parquet",
+            NAME=NAME,
+            scenario=SCENARIOS,
+        ),
+    output:
+        f"data/processed/{NAME}_mode_shares.png",
+    shell:
+        "uv run python workflow/scripts/plot_mode_shares.py"
+        " --config workflow/config.yaml"
+        " --output {output}"
 
 
 rule download_transit:

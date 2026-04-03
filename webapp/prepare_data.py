@@ -10,6 +10,7 @@ import argparse
 import json
 import math
 import re
+import shutil
 import sys
 from pathlib import Path
 
@@ -388,6 +389,14 @@ def main() -> None:
         zone_lut,
         OUT_DIR / "activities.json",
     )
+
+    # 9. Copy mode share plot to webapp static assets
+    figures_dir = Path(__file__).parent / "static" / "figures"
+    figures_dir.mkdir(parents=True, exist_ok=True)
+    src = data_dir / f"{name}_mode_shares.png"
+    if src.exists():
+        shutil.copy2(src, figures_dir / "mode_shares.png")
+        print(f"Copied mode share plot to {figures_dir / 'mode_shares.png'}")
 
 
 if __name__ == "__main__":
