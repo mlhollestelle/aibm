@@ -12,7 +12,7 @@ This project is an agent-based travel demand model approach with LLMs plus a web
 
 * Do not generate large amounts of code at once, but break steps down in atomic steps
 * Make sure best practices are followed/promote best practices.
-* `workflow/scripts/simulate.py` and `notebooks/simulate_walkthrough.ipynb` mirror each other, where the latter is to sanity check and validate the simulations step-by-step. Changes in simulate.py should also be reflected in simulate_walkthrough.ipynb whenever relevant.
+* `workflow/scripts/simulate.py` and `notebooks/simulation_walkthrough.ipynb` mirror each other. The notebook contains verbatim copies of the helper functions from `simulate.py` (marked with a comment). Any change to those functions in `simulate.py` **must** be reflected in the notebook in the **same commit**.
 * Consult the travel-demand-expert.md agent when doing steps which require theoretical input regarding transport modelling.
 
 ## Python
