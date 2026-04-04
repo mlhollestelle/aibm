@@ -45,6 +45,7 @@ pipeline = [
     "pyarrow>=15.0",
     "pyogrio>=0.10",
     "pyyaml>=6.0",
+    "seaborn>=0.13",
     "snakemake>=8.0",
     "requests>=2.31",
 ]
