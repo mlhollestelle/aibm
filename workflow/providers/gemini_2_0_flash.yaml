@@ -1,0 +1,4 @@
+# Gemini 2.0 Flash — fast and cheap, comparable to gpt-4o-mini.
+simulation:
+  model: gemini-2.0-flash
+  rate_limit_rpm: 500

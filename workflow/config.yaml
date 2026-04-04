@@ -210,12 +210,17 @@ simulation:
   #       schedule. Each needs a destination, start/end time,
   #       and which members participate.
 
-scenarios:
+providers:
   - gpt_4o_mini
   - gpt_4o_mini_seed2
   - claude_haiku_4_5
   - grok_4_1_fast_non_reasoning
   - grok_4_1_fast_reasoning
+  - gemini_2_0_flash
+
+iterations:
+  - baseline
+  - v1_trip_rate
 
 transit:
   # Set enabled: false to exclude transit from the simulation entirely.

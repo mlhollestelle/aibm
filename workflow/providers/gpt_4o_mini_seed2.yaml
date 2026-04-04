@@ -1,4 +1,5 @@
 # gpt-4o-mini with a different random seed.
+only_iterations: [baseline]
 simulation:
   model: gpt-4o-mini
   seed: 99

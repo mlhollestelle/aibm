@@ -1,0 +1,3 @@
+# v1: Fix unrealistically high trip rates.
+include_prompt_configs:
+  - trip_rate_fix
