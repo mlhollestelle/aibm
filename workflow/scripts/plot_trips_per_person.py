@@ -1,8 +1,7 @@
-"""Plot the distribution of trips per person as step histograms, one facet
-per scenario.
+"""Plot the distribution of trips per person, faceted by provider.
 
-Each panel shows how many daily trips agents make in that scenario, drawn
-as a step histogram similar to ggplot2's geom_step.
+Each panel shows one provider.  When multiple iterations exist they
+are overlaid as separate step histograms with different line styles.
 
 Usage:
     uv run python workflow/scripts/plot_trips_per_person.py \\
@@ -21,16 +20,22 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 # isort: split
 
-from _config import load_config
+from _config import build_scenarios, load_config  # noqa: E402
 
-_FACET_COLOR = "#4a6fa5"
 _COL_WRAP = 3
+_LINE_STYLES = ["-", "--", ":", "-."]
+_ITER_COLORS = [
+    "#4a6fa5",
+    "#e07b39",
+    "#59a14f",
+    "#b07aa1",
+]
 
 
 def parse_args() -> argparse.Namespace:
     """Parse --output flag; --config is consumed by load_config()."""
     parser = argparse.ArgumentParser(
-        description="Plot trips-per-person distribution by scenario.",
+        description=("Plot trips-per-person distribution by provider."),
     )
     parser.add_argument(
         "--output",
@@ -42,26 +47,17 @@ def parse_args() -> argparse.Namespace:
 
 def plot_trips_per_person(
     trips_per_agent: pd.DataFrame,
-    scenarios: list[str],
+    providers: list[str],
+    iterations: list[str],
     output: Path,
 ) -> None:
-    """Render faceted step-histograms of trips per person and save as PNG.
+    """Render faceted step-histograms of trips per person.
 
-    One panel per scenario. X-axis is the number of daily trips;
-    Y-axis is the agent count.
-
-    Parameters
-    ----------
-    trips_per_agent:
-        DataFrame with columns 'scenario' and 'n_trips'.
-    scenarios:
-        Ordered list of scenario names.
-    output:
-        Destination PNG path.
+    One panel per provider; iterations overlaid within each panel.
     """
-    n_scenarios = len(scenarios)
-    n_cols = min(_COL_WRAP, n_scenarios)
-    n_rows = -(-n_scenarios // n_cols)  # ceiling division
+    n_providers = len(providers)
+    n_cols = min(_COL_WRAP, n_providers)
+    n_rows = -(-n_providers // n_cols)  # ceiling division
 
     fig, axes = plt.subplots(
         n_rows,
@@ -70,31 +66,53 @@ def plot_trips_per_person(
         squeeze=False,
     )
 
-    for idx, scenario in enumerate(scenarios):
+    for idx, provider in enumerate(providers):
         r, c = divmod(idx, n_cols)
         ax = axes[r][c]
-        subset = trips_per_agent[
-            trips_per_agent["scenario"] == scenario
-        ]["n_trips"]
-        if len(subset) > 0:
-            max_trips = int(subset.max())
-            ax.hist(
-                subset,
-                bins=range(0, max_trips + 2),
-                histtype="step",
-                color=_FACET_COLOR,
-                linewidth=1.5,
-            )
-        ax.set_title(scenario, fontsize=9)
+        for it_idx, iteration in enumerate(iterations):
+            subset = trips_per_agent[
+                (trips_per_agent["provider"] == provider)
+                & (trips_per_agent["iteration"] == iteration)
+            ]["n_trips"]
+            color = _ITER_COLORS[it_idx % len(_ITER_COLORS)]
+            ls = _LINE_STYLES[it_idx % len(_LINE_STYLES)]
+            if len(subset) > 0:
+                max_trips = int(subset.max())
+                ax.hist(
+                    subset,
+                    bins=range(0, max_trips + 2),
+                    histtype="step",
+                    color=color,
+                    linewidth=1.5,
+                    linestyle=ls,
+                    label=iteration,
+                )
+        ax.set_title(provider, fontsize=9)
         ax.set_xlabel("Trips per person")
         ax.set_ylabel("Count" if c == 0 else "")
 
-    # Hide unused axes in the last row
-    for idx in range(n_scenarios, n_rows * n_cols):
+    # Hide unused axes
+    for idx in range(n_providers, n_rows * n_cols):
         r, c = divmod(idx, n_cols)
         axes[r][c].set_visible(False)
 
-    fig.suptitle("Trips per person by scenario", fontsize=11, y=1.01)
+    # Add iteration legend if more than one
+    if len(iterations) > 1:
+        handles, labels = axes[0][0].get_legend_handles_labels()
+        fig.legend(
+            handles,
+            labels,
+            title="Iteration",
+            loc="lower center",
+            ncol=len(iterations),
+            bbox_to_anchor=(0.5, -0.02),
+        )
+
+    fig.suptitle(
+        "Trips per person by provider",
+        fontsize=11,
+        y=1.01,
+    )
     plt.tight_layout()
     output.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output, dpi=150, bbox_inches="tight")
@@ -106,24 +124,33 @@ def main() -> None:
     args = parse_args()
     cfg = load_config()
     name = cfg["study_area"]["name"]
-    scenarios = cfg.get("scenarios", ["baseline"])
+    scenarios = build_scenarios(cfg)
+    providers = cfg.get("providers", [])
+    iterations = cfg.get("iterations", ["baseline"])
     data_dir = Path("data/processed")
+
+    # Only include providers that appear in actual scenarios
+    active_providers = sorted({s.split("__")[0] for s in scenarios})
+    providers = [p for p in providers if p in active_providers]
 
     frames: list[pd.DataFrame] = []
     for scenario in scenarios:
         path = data_dir / f"{name}_assigned_trips_{scenario}.parquet"
         df = pd.read_parquet(path, columns=["agent_id"])
         df["scenario"] = scenario
+        provider, iteration = scenario.split("__", 1)
+        df["provider"] = provider
+        df["iteration"] = iteration
         frames.append(df)
 
     trips = pd.concat(frames, ignore_index=True)
     trips_per_agent = (
-        trips.groupby(["scenario", "agent_id"])
+        trips.groupby(["scenario", "provider", "iteration", "agent_id"])
         .size()
         .reset_index(name="n_trips")
     )
 
-    plot_trips_per_person(trips_per_agent, scenarios, Path(args.output))
+    plot_trips_per_person(trips_per_agent, providers, iterations, Path(args.output))
 
 
 if __name__ == "__main__":

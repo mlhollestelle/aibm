@@ -1,9 +1,10 @@
-"""Plot trip distance distribution as step histograms, faceted by mode and
-scenario.
+"""Plot trip distance distribution as step histograms, faceted by
+provider and mode.
 
-Each panel shows the distance distribution (in km) for one (scenario, mode)
-combination, drawn as a step histogram similar to ggplot2's geom_step.
-Colours match the webapp's MODE_COLORS in layers.js.
+Each panel shows the distance distribution (in km) for one
+(provider, mode) combination.  When multiple iterations exist,
+they are overlaid as separate step histograms with different
+line styles.  Colours match the webapp's MODE_COLORS in layers.js.
 
 Usage:
     uv run python workflow/scripts/plot_trip_lengths.py \\
@@ -22,7 +23,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 # isort: split
 
-from _config import load_config
+from _config import build_scenarios, load_config  # noqa: E402
 
 # Matches MODE_COLORS in webapp/static/js/layers.js
 MODE_COLORS: dict[str, str] = {
@@ -33,12 +34,13 @@ MODE_COLORS: dict[str, str] = {
 }
 
 _MODE_ORDER = ["car", "bike", "transit", "walk"]
+_LINE_STYLES = ["-", "--", ":", "-."]
 
 
 def parse_args() -> argparse.Namespace:
     """Parse --output flag; --config is consumed by load_config()."""
     parser = argparse.ArgumentParser(
-        description="Plot trip distance distributions by mode and scenario.",
+        description=("Plot trip distance distributions by mode and provider."),
     )
     parser.add_argument(
         "--output",
@@ -50,25 +52,18 @@ def parse_args() -> argparse.Namespace:
 
 def plot_trip_lengths(
     df: pd.DataFrame,
-    scenarios: list[str],
+    providers: list[str],
+    iterations: list[str],
     output: Path,
 ) -> None:
     """Render a faceted step-histogram grid and save as PNG.
 
-    Rows = scenarios, columns = modes. Each cell is a step histogram of
-    trip distances (km) for that (scenario, mode) pair, coloured by mode.
-
-    Parameters
-    ----------
-    df:
-        DataFrame with columns 'scenario', 'mode', 'distance_km'.
-    scenarios:
-        Ordered list of scenario names (row order).
-    output:
-        Destination PNG path.
+    Rows = providers, columns = modes.  When there are multiple
+    iterations, each is drawn as a separate line (different style)
+    inside the same panel.
     """
     col_order = [m for m in _MODE_ORDER if m in df["mode"].unique()]
-    n_rows = len(scenarios)
+    n_rows = len(providers)
     n_cols = len(col_order)
 
     fig, axes = plt.subplots(
@@ -79,32 +74,49 @@ def plot_trip_lengths(
         squeeze=False,
     )
 
-    for r, scenario in enumerate(scenarios):
+    for r, provider in enumerate(providers):
         for c, mode in enumerate(col_order):
             ax = axes[r][c]
-            subset = df[
-                (df["scenario"] == scenario) & (df["mode"] == mode)
-            ]["distance_km"].dropna()
             color = MODE_COLORS.get(mode, "#666666")
-            if len(subset) > 0:
-                ax.hist(
-                    subset,
-                    bins=20,
-                    histtype="step",
-                    color=color,
-                    linewidth=1.5,
-                )
+            for it_idx, iteration in enumerate(iterations):
+                subset = df[
+                    (df["provider"] == provider)
+                    & (df["iteration"] == iteration)
+                    & (df["mode"] == mode)
+                ]["distance_km"].dropna()
+                ls = _LINE_STYLES[it_idx % len(_LINE_STYLES)]
+                if len(subset) > 0:
+                    ax.hist(
+                        subset,
+                        bins=20,
+                        histtype="step",
+                        color=color,
+                        linewidth=1.5,
+                        linestyle=ls,
+                        label=iteration,
+                    )
             ax.set_xlabel("Distance (km)" if r == n_rows - 1 else "")
             ax.set_ylabel("Count" if c == 0 else "")
 
-            # Column header on top row, row label on left column
             if r == 0:
                 ax.set_title(mode, color=color, fontweight="bold")
             if c == 0:
-                ax.set_ylabel(scenario, fontsize=8)
+                ax.set_ylabel(provider, fontsize=8)
+
+    # Add iteration legend if more than one
+    if len(iterations) > 1:
+        handles, labels = axes[0][0].get_legend_handles_labels()
+        fig.legend(
+            handles,
+            labels,
+            title="Iteration",
+            loc="lower center",
+            ncol=len(iterations),
+            bbox_to_anchor=(0.5, -0.02),
+        )
 
     fig.suptitle(
-        "Trip distance distribution by mode and scenario",
+        "Trip distance distribution by provider and mode",
         fontsize=11,
         y=1.01,
     )
@@ -119,21 +131,30 @@ def main() -> None:
     args = parse_args()
     cfg = load_config()
     name = cfg["study_area"]["name"]
-    scenarios = cfg.get("scenarios", ["baseline"])
+    scenarios = build_scenarios(cfg)
+    providers = cfg.get("providers", [])
+    iterations = cfg.get("iterations", ["baseline"])
     data_dir = Path("data/processed")
+
+    # Only include providers that appear in actual scenarios
+    active_providers = sorted({s.split("__")[0] for s in scenarios})
+    providers = [p for p in providers if p in active_providers]
 
     frames: list[pd.DataFrame] = []
     for scenario in scenarios:
         path = data_dir / f"{name}_assigned_trips_{scenario}.parquet"
         df = pd.read_parquet(path, columns=["mode", "distance"])
         df["scenario"] = scenario
+        provider, iteration = scenario.split("__", 1)
+        df["provider"] = provider
+        df["iteration"] = iteration
         frames.append(df)
 
     trips = pd.concat(frames, ignore_index=True)
     trips = trips[trips["mode"].notna() & trips["distance"].notna()].copy()
     trips["distance_km"] = trips["distance"] / 1000.0
 
-    plot_trip_lengths(trips, scenarios, Path(args.output))
+    plot_trip_lengths(trips, providers, iterations, Path(args.output))
 
 
 if __name__ == "__main__":

@@ -4,12 +4,41 @@ Run with:
     uv run snakemake --cores 1 -s workflow/Snakefile
 """
 
+import yaml as _yaml
+
 configfile: "workflow/config.yaml"
 
 NAME = config["study_area"]["name"]
 MODES = config["network"]["modes"]
 TRANSIT = config.get("transit", {}).get("enabled", False)
-SCENARIOS = config.get("scenarios", ["baseline"])
+
+PROVIDERS = config.get("providers", [])
+ITERATIONS = config.get("iterations", ["baseline"])
+
+
+def _build_scenarios():
+    """Build provider×iteration cross-product, respecting only_iterations."""
+    scenarios = []
+    for p in PROVIDERS:
+        p_path = f"workflow/providers/{p}.yaml"
+        with open(p_path) as _f:
+            p_cfg = _yaml.safe_load(_f) or {}
+        allowed = p_cfg.get("only_iterations", ITERATIONS)
+        for i in ITERATIONS:
+            if i in allowed:
+                scenarios.append(f"{p}__{i}")
+    return scenarios
+
+
+SCENARIOS = _build_scenarios()
+
+
+def _provider(scenario):
+    return scenario.split("__")[0]
+
+
+def _iteration(scenario):
+    return scenario.split("__")[1]
 
 
 rule all:
@@ -176,7 +205,8 @@ rule simulate:
         skim_transit=(
             [f"data/processed/{NAME}_skim_transit.omx"] if TRANSIT else []
         ),
-        scenario_yaml="workflow/scenarios/{scenario}.yaml",
+        provider_yaml=lambda wc: f"workflow/providers/{_provider(wc.scenario)}.yaml",
+        iteration_yaml=lambda wc: f"workflow/iterations/{_iteration(wc.scenario)}.yaml",
     output:
         trips=f"data/processed/{NAME}_trips_{{scenario}}.parquet",
         day_plans=f"data/processed/{NAME}_day_plans_{{scenario}}.parquet",
