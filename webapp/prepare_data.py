@@ -10,6 +10,7 @@ import argparse
 import json
 import math
 import re
+import shutil
 import sys
 from pathlib import Path
 
@@ -388,6 +389,19 @@ def main() -> None:
         zone_lut,
         OUT_DIR / "activities.json",
     )
+
+    # 9. Copy plots to webapp static assets
+    figures_dir = Path(__file__).parent / "static" / "figures"
+    figures_dir.mkdir(parents=True, exist_ok=True)
+    for src_name, dest_name in [
+        (f"{name}_mode_shares.png", "mode_shares.png"),
+        (f"{name}_trip_lengths.png", "trip_lengths.png"),
+        (f"{name}_trips_per_person.png", "trips_per_person.png"),
+    ]:
+        src = data_dir / src_name
+        if src.exists():
+            shutil.copy2(src, figures_dir / dest_name)
+            print(f"Copied {dest_name} to {figures_dir / dest_name}")
 
 
 if __name__ == "__main__":

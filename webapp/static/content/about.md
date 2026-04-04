@@ -11,6 +11,18 @@ where AI meets planning.
 
 [Read the full paper →](paper.html)
 
+## Mode share by scenario
+
+![Mode share across LLM scenarios](./figures/mode_shares.png)
+
+## Trip distance distribution
+
+![Trip distance distributions by mode and scenario](./figures/trip_lengths.png)
+
+## Trips per person
+
+![Number of trips per person by scenario](./figures/trips_per_person.png)
+
 ---
 
 This project is by [Martijn Hollestelle](https://www.linkedin.com/in/martijn-hollestelle/).
