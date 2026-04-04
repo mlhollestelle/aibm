@@ -195,42 +195,205 @@ The pipeline steps are:
 
 Output lands in `data/processed/walcheren_population.parquet`.
 
-### Scenarios
+### Providers and iterations
 
-The pipeline supports running multiple simulation scenarios side-by-side.
-Expensive shared steps (network download, grid processing, population
-synthesis, skim matrices, POIs) run once and are reused. Only `simulate`
-and `assign_network` re-run per scenario.
+The pipeline is built around a **2D matrix** of providers and iterations.
+A *provider* is an LLM model configuration. An *iteration* is a set of
+prompt overrides — a named experiment round. Snakemake computes the full
+cross-product and runs each combination as a separate scenario.
 
-**How it works:**
+```
+providers × iterations  →  scenarios
+─────────────────────────────────────
+gpt_4o_mini   × baseline       → gpt_4o_mini__baseline
+gpt_4o_mini   × v1_trip_rate   → gpt_4o_mini__v1_trip_rate
+claude_haiku  × baseline       → claude_haiku__baseline
+claude_haiku  × v1_trip_rate   → claude_haiku__v1_trip_rate
+...
+```
 
-- `workflow/config.yaml` is the base config with a `scenarios:` list
-- Each scenario has a YAML file in `workflow/scenarios/<name>.yaml` that
-  overrides only the `simulation:` block
-- Scenario outputs are suffixed: `walcheren_assigned_trips_<name>.parquet`
+Scenario outputs are named `{name}_assigned_trips_{provider}__{iteration}.parquet`.
+Expensive shared steps (network, population synthesis, POIs) run once and
+are reused across all scenarios.
 
-The `baseline` scenario ships with the project and applies no overrides.
+#### Directory layout
 
-**Adding a scenario** (e.g. to test a different model):
+```
+workflow/
+├── config.yaml           # lists which providers and iterations to run
+├── providers/            # one YAML per LLM model
+│   ├── gpt_4o_mini.yaml
+│   ├── claude_haiku_4_5.yaml
+│   ├── gemini_2_0_flash.yaml
+│   └── ...
+├── iterations/           # one YAML per experiment round
+│   ├── baseline.yaml
+│   └── v1_trip_rate.yaml
+└── prompt_configs/       # reusable prompt snippets, included by iterations
+    └── trip_rate_fix.yaml
+```
 
-1. Create `workflow/scenarios/my_scenario.yaml`:
+#### Provider YAMLs (`workflow/providers/`)
+
+Each file sets the model name, rate limit, and any other simulation
+overrides specific to that model. Example:
+
+```yaml
+# workflow/providers/gpt_4o_mini.yaml
+simulation:
+  model: gpt-4o-mini
+  rate_limit_rpm: 500
+```
+
+The optional `only_iterations` field restricts a provider to a subset of
+iterations. This is useful for providers you want to use as a secondary
+reference (e.g. a different random seed) without running every iteration:
+
+```yaml
+# workflow/providers/gpt_4o_mini_seed2.yaml
+only_iterations: [baseline]   # skip v1_trip_rate, v2, etc.
+simulation:
+  model: gpt-4o-mini
+  seed: 99
+```
+
+#### Iteration YAMLs (`workflow/iterations/`)
+
+Each file defines a prompt experiment round. The baseline is empty — it
+applies no overrides on top of the base config:
+
+```yaml
+# workflow/iterations/baseline.yaml
+{}
+```
+
+A non-baseline iteration includes prompt overrides. These can be inlined
+directly, or pulled in from a reusable `prompt_configs/` file via
+`include_prompt_configs`:
+
+```yaml
+# workflow/iterations/v1_trip_rate.yaml
+include_prompt_configs:
+  - trip_rate_fix          # loaded from workflow/prompt_configs/trip_rate_fix.yaml
+
+simulation:
+  prompts:
+    discretionary:
+      instructions: |
+        Before planning each activity, ask: "Would I really go out for
+        this today, or can it wait until another day?" ...
+```
+
+The merge order is: base config → provider YAML → included prompt configs
+→ inline iteration overrides. Later values win on conflict.
+
+#### Prompt configs (`workflow/prompt_configs/`)
+
+Reusable prompt snippets that can be shared across multiple iterations.
+A prompt config contains a `prompts:` block using the same structure as
+`simulation.prompts` in `config.yaml`:
+
+```yaml
+# workflow/prompt_configs/trip_rate_fix.yaml
+prompts:
+  activities:
+    instructions: |
+      Plan only the activities you would genuinely do on this specific
+      day — not everything you might do over the course of a week.
+      ...
+```
+
+#### Configuring the matrix in `workflow/config.yaml`
+
+The `providers:` and `iterations:` lists at the bottom of the file
+control what gets run:
+
+```yaml
+providers:
+  - gpt_4o_mini
+  - gpt_4o_mini_seed2    # has only_iterations: [baseline]
+  - claude_haiku_4_5
+  - gemini_2_0_flash
+
+iterations:
+  - baseline
+  - v1_trip_rate
+```
+
+#### Adding a new provider
+
+1. Create `workflow/providers/my_model.yaml`:
    ```yaml
    simulation:
      model: gpt-4o
+     rate_limit_rpm: 60
    ```
-2. Add it to `workflow/config.yaml`:
-   ```yaml
-   scenarios:
-     - baseline
-     - gpt4o
-   ```
-3. Run the pipeline — only the new scenario's simulate and assign steps run:
-   ```sh
-   uv run snakemake --cores 1 -s workflow/Snakefile
-   ```
+2. Set the relevant API key (see prerequisites above).
+3. Add `my_model` to the `providers:` list in `workflow/config.yaml`.
+4. Run the pipeline — Snakemake picks up the new provider and runs it
+   for every iteration in the `iterations:` list.
 
-Any key inside `simulation:` can be overridden per scenario, including
-`model`, `n_households`, `seed`, and individual `prompts:` sections.
+#### Adding a new iteration (prompt experiment)
+
+1. Create `workflow/iterations/v2_my_fix.yaml`:
+   ```yaml
+   include_prompt_configs:
+     - trip_rate_fix       # reuse an existing snippet if needed
+
+   simulation:
+     prompts:
+       activities:
+         instructions: |
+           Your custom instruction here.
+   ```
+2. Add `v2_my_fix` to the `iterations:` list in `workflow/config.yaml`.
+3. Run the pipeline — every provider now gets a `{provider}__v2_my_fix`
+   scenario automatically.
+
+#### Running partial subsets
+
+You never have to change the config to run only part of the matrix.
+Target specific output files directly on the Snakemake command line:
+
+```sh
+# One specific combination
+uv run snakemake --cores 1 -s workflow/Snakefile \
+  data/processed/walcheren_assigned_trips_gpt_4o_mini__v1_trip_rate.parquet
+
+# All providers for one iteration
+uv run snakemake --cores 1 -s workflow/Snakefile \
+  data/processed/walcheren_assigned_trips_gpt_4o_mini__v1_trip_rate.parquet \
+  data/processed/walcheren_assigned_trips_claude_haiku_4_5__v1_trip_rate.parquet \
+  data/processed/walcheren_assigned_trips_gemini_2_0_flash__v1_trip_rate.parquet
+
+# One provider across all iterations
+uv run snakemake --cores 1 -s workflow/Snakefile \
+  data/processed/walcheren_assigned_trips_gpt_4o_mini__baseline.parquet \
+  data/processed/walcheren_assigned_trips_gpt_4o_mini__v1_trip_rate.parquet
+
+# Only the comparison plots (once data exists)
+uv run snakemake --cores 1 -s workflow/Snakefile \
+  data/processed/walcheren_mode_shares.png
+```
+
+#### Comparison plots
+
+Three plots are generated automatically as part of the pipeline. Each
+reads all scenarios from the matrix and facets by provider and iteration:
+
+| Script | What it shows |
+|--------|---------------|
+| `plot_mode_shares.py` | Mode share (%) per provider, faceted by iteration |
+| `plot_trip_lengths.py` | Trip distance distributions, rows = provider, columns = mode, iterations overlaid |
+| `plot_trips_per_person.py` | Trips-per-person histogram, one panel per provider, iterations overlaid |
+
+Run them manually with:
+
+```sh
+uv run python workflow/scripts/plot_mode_shares.py \
+  --config workflow/config.yaml \
+  --output data/processed/walcheren_mode_shares.png
+```
 
 ## Web app
 
