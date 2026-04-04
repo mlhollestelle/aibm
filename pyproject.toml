@@ -38,6 +38,7 @@ webapp = [
 ]
 pipeline = [
     "geopandas>=1.0",
+    "matplotlib>=3.9",
     "numpy>=1.26",
     "openmatrix>=0.3.5",
     "osmnx>=2.0",
