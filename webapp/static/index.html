@@ -36,7 +36,17 @@
 <body>
   <div id="map-container">
     <!-- Loading overlay -->
-    <div id="loading-overlay"><div class="spinner"></div></div>
+    <div id="loading-overlay">
+      <div id="loading-inner">
+        <div class="spinner"></div>
+        <p class="loading-area">Walcheren, Netherlands</p>
+        <p class="loading-desc">
+          Synthetic residents navigate a real road network.<br>
+          Every trip decision is explained by the LLM that made it.
+        </p>
+        <p class="loading-hint">Tap any agent on the map to read their reasoning</p>
+      </div>
+    </div>
 
     <!-- Map legend -->
     <div id="legend">
@@ -126,5 +136,6 @@
   <script src="js/panels.js"></script>
   <script src="js/about.js"></script>
   <script src="js/main.js"></script>
+  <script src="js/onboarding.js"></script>
 </body>
 </html>

@@ -321,17 +321,21 @@ function onAgentHover(info) {
 
 // ── Click → detail panel ───────────────────────────
 
-function onAgentClick(info) {
-  selectedAgentId = info.object.agent.id;
+function selectAgentById(id) {
+  selectedAgentId = id;
   hoveredAgentId = null;
   rebuildLayers();
-  const sched = agentSchedules[selectedAgentId];
+  const sched = agentSchedules[id];
   if (sched) {
     const state = agentStateAt(sched, currentTime);
     const reasoning = _currentReasoning(sched, currentTime);
     updateBubble(state.lon, state.lat, reasoning);
   }
-  renderDetailPanel(selectedAgentId);
+  renderDetailPanel(id);
+}
+
+function onAgentClick(info) {
+  selectAgentById(info.object.agent.id);
 }
 
 function renderDetailPanel(agentId) {
@@ -453,11 +457,14 @@ function rebuildLayers() {
 
 // ── Init ────────────────────────────────────────────
 
+const MIN_LOADING_MS = 2500;
+
 async function loadData() {
   const [agents, trips, activities] = await Promise.all([
     loadJSON("data/agents.json"),
     loadJSON("data/trips.json"),
     loadJSON("data/activities.json"),
+    new Promise((resolve) => setTimeout(resolve, MIN_LOADING_MS)),
   ]);
 
   const agentsArr = agents || [];
@@ -477,6 +484,8 @@ async function loadData() {
   // Hide loading overlay
   const overlay = document.getElementById("loading-overlay");
   if (overlay) overlay.classList.add("hidden");
+
+  document.dispatchEvent(new CustomEvent("aibm:loaded"));
 }
 
 function init() {
