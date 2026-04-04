@@ -1,3 +1,33 @@
-# v1: Fix unrealistically high trip rates.
+# v1: Bring trip rates closer to Dutch travel survey norms.
+#
+# Two-stage fix:
+#   1. trip_rate_fix (activities prompt) — only generate activities
+#      that would realistically happen on this specific day.
+#   2. Discretionary override (below) — second filter at the planning
+#      step: drop activities that require a large detour or don't fit
+#      naturally into available time.
 include_prompt_configs:
   - trip_rate_fix
+
+simulation:
+  prompts:
+    discretionary:
+      instructions: |
+        Before planning each activity, ask: "Would I really go out for
+        this today, or can it wait until another day?"
+
+        Only keep an activity if:
+        - It fits within an available gap without requiring a significant
+          detour (roughly: the destination adds less than 15 minutes of
+          extra travel compared to going straight home), OR
+        - It is genuinely urgent or time-sensitive today.
+
+        If an activity does not pass this test, leave it out. It is
+        perfectly fine to return fewer activities than listed, or an
+        empty list.
+
+        For activities you do keep: choose a destination, assign
+        start_time and end_time (HH:MM strings) within the available
+        gap, and ensure the schedule is feasible including travel time.
+        You must be home by 23:00.
+        Return entries in chronological order.
