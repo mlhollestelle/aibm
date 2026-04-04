@@ -231,7 +231,23 @@ function updateBubble(lon, lat, reasoning) {
   const [x, y] = vp.project([lon, lat]);
   el.style.left = x + "px";
   el.style.top  = y + "px";
-  el.querySelector(".bubble-content").textContent = reasoning;
+
+  const content = el.querySelector(".bubble-content");
+  content.textContent = reasoning;
+  content.classList.remove("expanded");
+
+  let btn = el.querySelector(".bubble-expand");
+  if (!btn) {
+    btn = document.createElement("button");
+    btn.className = "bubble-expand";
+    el.appendChild(btn);
+    btn.addEventListener("click", () => {
+      const expanded = content.classList.toggle("expanded");
+      btn.textContent = expanded ? "Show less" : "Read more";
+    });
+  }
+  btn.textContent = "Read more";
+
   el.classList.remove("hidden");
 }
 
