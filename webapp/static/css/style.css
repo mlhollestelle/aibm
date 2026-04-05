@@ -415,6 +415,31 @@ body {
   background: rgba(255, 255, 255, 0.07);
 }
 
+#detail-area .timeline .tl-reasoning-toggle {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 10px;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+#detail-area .timeline .tl-reasoning-toggle:hover {
+  color: var(--text-secondary);
+}
+
+#detail-area .timeline .tl-reasoning {
+  margin-top: 4px;
+  font-size: 11px;
+  font-style: italic;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+#detail-area .timeline .tl-reasoning.hidden {
+  display: none;
+}
+
 /* ── deck.gl canvas ──────────────────────────────── */
 #map-container canvas {
   outline: none;

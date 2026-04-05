@@ -47,6 +47,7 @@ class Activity:
     end_time: float | None = None
     is_flexible: bool = True
     is_joint: bool = False
+    reasoning: str = ""
 
 
 @dataclass

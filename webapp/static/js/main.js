@@ -358,6 +358,7 @@ function renderDetailPanel(agentId) {
       end: act.end,
       label: act.type,
       kind: "activity",
+      reasoning: act.reasoning || null,
     });
   }
   for (const trip of sched.trips) {
@@ -392,15 +393,27 @@ function renderDetailPanel(agentId) {
       ev.companions && ev.companions.length
         ? ` <span class="tl-companion">with ${ev.companions.join(", ")}</span>`
         : "";
+    const reasoningHtml = ev.reasoning
+      ? `<span class="tl-reasoning-toggle" onclick="toggleActivityReasoning(this)">reason ▾</span>` +
+        `<div class="tl-reasoning hidden">${ev.reasoning}</div>`
+      : "";
     html += `<li class="${active}">`;
     html += `<span class="tl-time">${timeStr}</span>`;
     html += `<span class="tl-label">${ev.label}</span>`;
     html += modeTag;
     html += companionTag;
+    html += reasoningHtml;
     html += `</li>`;
   }
   html += `</ul>`;
   area.innerHTML = html;
+}
+
+function toggleActivityReasoning(toggle) {
+  const box = toggle.nextElementSibling;
+  const expanded = !box.classList.contains("hidden");
+  box.classList.toggle("hidden", expanded);
+  toggle.textContent = expanded ? "reason ▾" : "reason ▴";
 }
 
 function modeColorHex(mode) {
