@@ -23,6 +23,7 @@ from _config import load_config
 
 _ZONE_RE = re.compile(r"E(\d+)N(\d+)")
 _SPEED_RE = re.compile(r"(\d+)")
+_POI_RE = re.compile(r"^(\d+)")
 
 
 def _parse_maxspeed(value: str | list[str]) -> float | None:
@@ -100,6 +101,16 @@ def _is_zone_id(loc: str) -> bool:
     return _ZONE_RE.match(loc) is not None
 
 
+def _parse_osm_node_id(loc: str) -> int | None:
+    """Extract numeric OSM node ID from a POI location string.
+
+    Handles formats like ``'2450875961: Jumbo'`` or ``'2450875961'``.
+    Returns None if *loc* does not start with digits.
+    """
+    m = _POI_RE.match(loc)
+    return int(m.group(1)) if m else None
+
+
 def _load_transit_graph(path: Path) -> nx.DiGraph | None:
     """Load transit stop graph; return None if missing or empty."""
     if not path.exists():
@@ -108,6 +119,27 @@ def _load_transit_graph(path: Path) -> nx.DiGraph | None:
     if g.number_of_nodes() == 0:
         return None
     return g
+
+
+def _snap_coord_to_transit(
+    lat: float,
+    lon: float,
+    node_coords: list[tuple[int, float, float]],
+    max_walk_m: float,
+) -> int | None:
+    """Return the nearest stop node ID within *max_walk_m* metres, or None."""
+    import math
+
+    best_id: int | None = None
+    best_dist = float("inf")
+    for nid, nlat, nlon in node_coords:
+        dlat = (nlat - lat) * 111320
+        dlon = (nlon - lon) * 111320 * math.cos(math.radians(lat))
+        dist = math.hypot(dlat, dlon)
+        if dist < best_dist:
+            best_dist = dist
+            best_id = nid
+    return best_id if best_dist <= max_walk_m else None
 
 
 def _snap_zones_to_transit(
@@ -140,18 +172,9 @@ def _snap_zones_to_transit(
         # Simple RD → WGS84 approximation (Zeeland area)
         lat_z = 51.5 + (n - 392000) / 111320
         lon_z = 3.7 + (e - 21000) / (111320 * math.cos(math.radians(51.5)))
-
-        best_id: int | None = None
-        best_dist = float("inf")
-        for nid, nlat, nlon in node_coords:
-            dlat = (nlat - lat_z) * 111320
-            dlon = (nlon - lon_z) * 111320 * math.cos(math.radians(lat_z))
-            dist = math.hypot(dlat, dlon)
-            if dist < best_dist:
-                best_dist = dist
-                best_id = nid
-
-        zone_to_stop[zid] = best_id if best_dist <= max_walk_m else None
+        zone_to_stop[zid] = _snap_coord_to_transit(
+            lat_z, lon_z, node_coords, max_walk_m
+        )
 
     return zone_to_stop
 
@@ -197,6 +220,17 @@ def assign_network(cfg: dict, scenario: str = "baseline") -> Path:
 
     trips = pd.read_parquet(f"data/processed/{name}_trips_{scenario}.parquet")
 
+    # Build POI id → (easting, northing) lookup for snapping POI destinations.
+    poi_coords: dict[str, tuple[float, float]] = {}
+    poi_path = Path(f"data/processed/{name}_pois.parquet")
+    if poi_path.exists():
+        import geopandas as gpd
+
+        pois_gdf = gpd.read_parquet(poi_path)
+        for _, row in pois_gdf.iterrows():
+            key = str(int(row["osmid"]))
+            poi_coords[key] = (float(row.geometry.x), float(row.geometry.y))
+
     road_modes = [m for m in cfg["network"]["modes"] if m != "transit"]
     mode_graphs: dict[str, nx.MultiDiGraph] = {}
     for mode in road_modes:
@@ -223,13 +257,42 @@ def assign_network(cfg: dict, scenario: str = "baseline") -> Path:
                 all_transit_locs = set(transit_trips["origin"].tolist()) | set(
                     transit_trips["destination"].tolist()
                 )
+                max_walk_m = float(transit_cfg.get("max_walk_to_stop_m", 800))
                 zone_locs_t = [loc for loc in all_transit_locs if _is_zone_id(loc)]
                 transit_zone_to_stop = _snap_zones_to_transit(
                     zone_locs_t,
                     transit_graph,
                     float(transit_cfg.get("walk_speed_kmh", 5.0)),
-                    float(transit_cfg.get("max_walk_to_stop_m", 800)),
+                    max_walk_m,
                 )
+                # Also snap POI transit locations using stored coordinates.
+                import math
+
+                t_node_coords: list[tuple[int, float, float]] = []
+                for nid, data in transit_graph.nodes(data=True):
+                    t_node_coords.append(
+                        (
+                            int(nid),
+                            float(data.get("lat", data.get("y", 0))),
+                            float(data.get("lon", data.get("x", 0))),
+                        )
+                    )
+                for loc in all_transit_locs:
+                    if _is_zone_id(loc):
+                        continue
+                    osm_id = _parse_osm_node_id(loc)
+                    key = str(osm_id) if osm_id is not None else None
+                    if key and key in poi_coords:
+                        e_rd, n_rd = poi_coords[key]
+                        lat_p = 51.5 + (n_rd - 392000) / 111320
+                        lon_p = 3.7 + (e_rd - 21000) / (
+                            111320 * math.cos(math.radians(51.5))
+                        )
+                        transit_zone_to_stop[loc] = _snap_coord_to_transit(
+                            lat_p, lon_p, t_node_coords, max_walk_m
+                        )
+                    else:
+                        transit_zone_to_stop[loc] = None
 
     # Pre-compute zone-to-node mapping per road mode so we snap once.
     mode_zone_to_node: dict[str, dict[str, int]] = {}
@@ -242,12 +305,31 @@ def assign_network(cfg: dict, scenario: str = "baseline") -> Path:
             mode_trips["destination"].tolist()
         )
         zone_locs = [loc for loc in all_locs if _is_zone_id(loc)]
-        if not zone_locs:
+        loc_to_node: dict[str, int] = {}
+        if zone_locs:
+            eastings, northings = _centroids_from_zone_ids(zone_locs)
+            nearest = ox.nearest_nodes(graph, eastings, northings)
+            loc_to_node.update(zip(zone_locs, nearest))
+
+        # Also snap POI locations using their stored coordinates.
+        poi_locs = [loc for loc in all_locs if not _is_zone_id(loc)]
+        poi_e, poi_n, valid_poi_locs = [], [], []
+        for loc in poi_locs:
+            osm_id = _parse_osm_node_id(loc)
+            if osm_id is not None:
+                key = str(osm_id)
+                if key in poi_coords:
+                    poi_e.append(poi_coords[key][0])
+                    poi_n.append(poi_coords[key][1])
+                    valid_poi_locs.append(loc)
+        if valid_poi_locs:
+            nearest_poi = ox.nearest_nodes(graph, poi_e, poi_n)
+            loc_to_node.update(zip(valid_poi_locs, nearest_poi))
+
+        if not loc_to_node:
             mode_zone_to_node[mode] = {}
             continue
-        eastings, northings = _centroids_from_zone_ids(zone_locs)
-        nearest = ox.nearest_nodes(graph, eastings, northings)
-        mode_zone_to_node[mode] = dict(zip(zone_locs, nearest))
+        mode_zone_to_node[mode] = loc_to_node
 
     def _route_distance(graph: nx.MultiDiGraph, path: list[int]) -> float:
         """Sum edge lengths (metres) along *path* in *graph*."""
