@@ -121,80 +121,100 @@ def _load_transit_graph(path: Path) -> nx.DiGraph | None:
     return g
 
 
-def _snap_coord_to_transit(
-    lat: float,
-    lon: float,
-    node_coords: list[tuple[int, float, float]],
-    max_walk_m: float,
-) -> int | None:
-    """Return the nearest stop node ID within *max_walk_m* metres, or None."""
-    import math
+def _build_stop_walk_node_map(
+    transit_graph: nx.DiGraph,
+    walk_graph: nx.MultiDiGraph,
+) -> dict[int, str]:
+    """Map each walk-network node to the transit stop snapped to it.
 
-    best_id: int | None = None
-    best_dist = float("inf")
-    for nid, nlat, nlon in node_coords:
-        dlat = (nlat - lat) * 111320
-        dlon = (nlon - lon) * 111320 * math.cos(math.radians(lat))
-        dist = math.hypot(dlat, dlon)
-        if dist < best_dist:
-            best_dist = dist
-            best_id = nid
-    return best_id if best_dist <= max_walk_m else None
+    Only active stops (those with at least one edge in *transit_graph*)
+    are included, so zones are never routed to isolated stub nodes.
 
-
-def _snap_zones_to_transit(
-    zone_ids: list[str],
-    graph: nx.DiGraph,
-    walk_speed_kmh: float,
-    max_walk_m: float,
-) -> dict[str, int | None]:
-    """Map each zone centroid to the nearest stop node within walk distance.
-
-    Returns {zone_id: osm_node_id or None}.
+    Returns {walk_node_id: stop_id}.
     """
-    import math
+    from pyproj import Transformer
 
-    zone_to_stop: dict[str, int | None] = {}
-    node_coords: list[tuple[int, float, float]] = []
-    for nid, data in graph.nodes(data=True):
-        lat = float(data.get("lat", data.get("y", 0)))
-        lon = float(data.get("lon", data.get("x", 0)))
-        node_coords.append((int(nid), lat, lon))
+    active_stop_ids = {str(u) for u, v in transit_graph.edges()} | {
+        str(v) for u, v in transit_graph.edges()
+    }
+    if not active_stop_ids:
+        return {}
 
-    for zid in zone_ids:
-        m = _ZONE_RE.match(zid)
-        if m is None:
-            zone_to_stop[zid] = None
+    stop_ids: list[str] = []
+    lats: list[float] = []
+    lons: list[float] = []
+    for nid, data in transit_graph.nodes(data=True):
+        if str(nid) not in active_stop_ids:
             continue
-        # EPSG:28992 → approximate WGS84 (good enough for snapping)
-        e = int(m.group(1)) * 100 + 50
-        n = int(m.group(2)) * 100 + 50
-        # Simple RD → WGS84 approximation (Zeeland area)
-        lat_z = 51.5 + (n - 392000) / 111320
-        lon_z = 3.7 + (e - 21000) / (111320 * math.cos(math.radians(51.5)))
-        zone_to_stop[zid] = _snap_coord_to_transit(
-            lat_z, lon_z, node_coords, max_walk_m
-        )
+        lats.append(float(data.get("lat", data.get("y", 0))))
+        lons.append(float(data.get("lon", data.get("x", 0))))
+        stop_ids.append(str(nid))
 
-    return zone_to_stop
+    if not stop_ids:
+        return {}
+
+    transformer = Transformer.from_crs("EPSG:4326", "EPSG:28992", always_xy=True)
+    eastings, northings = transformer.transform(lons, lats)
+    walk_nodes = ox.nearest_nodes(walk_graph, eastings, northings)
+
+    walk_node_to_stop: dict[int, str] = {}
+    for stop_id, wnode in zip(stop_ids, walk_nodes):
+        walk_node_to_stop[int(wnode)] = stop_id
+    return walk_node_to_stop
+
+
+def _snap_locs_to_transit_via_walk(
+    loc_to_walk_node: dict[str, int],
+    walk_graph: nx.MultiDiGraph,
+    stop_walk_node_map: dict[int, str],
+) -> dict[str, str | None]:
+    """Find the nearest reachable transit stop for each location via the walk network.
+
+    Runs Dijkstra from each unique walk node and picks the stop walk-node
+    with the lowest travel time. Consistent with the transit skim builder.
+
+    Returns {location_string: stop_id or None}.
+    """
+    stop_node_set = set(stop_walk_node_map.keys())
+    loc_to_stop: dict[str, str | None] = {}
+
+    # Group locations sharing a walk node to avoid duplicate Dijkstra runs.
+    walk_node_to_locs: dict[int, list[str]] = {}
+    for loc, wnode in loc_to_walk_node.items():
+        walk_node_to_locs.setdefault(wnode, []).append(loc)
+
+    for origin_wnode, locs in walk_node_to_locs.items():
+        costs = nx.single_source_dijkstra_path_length(
+            walk_graph, origin_wnode, weight="travel_time_min"
+        )
+        best_stop: str | None = None
+        best_tt = float("inf")
+        for wnode, tt in costs.items():
+            if wnode in stop_node_set and tt < best_tt:
+                best_tt = tt
+                best_stop = stop_walk_node_map[wnode]
+        for loc in locs:
+            loc_to_stop[loc] = best_stop
+
+    return loc_to_stop
 
 
 def _route_transit_trip(
     origin: str,
     dest: str,
-    zone_to_stop: dict[str, int | None],
+    loc_to_stop: dict[str, str | None],
     graph: nx.DiGraph,
 ) -> list[int]:
     """Shortest path through stop graph; returns [] on failure."""
-    o_stop = zone_to_stop.get(origin)
-    d_stop = zone_to_stop.get(dest)
+    o_stop = loc_to_stop.get(origin)
+    d_stop = loc_to_stop.get(dest)
     if o_stop is None or d_stop is None or o_stop == d_stop:
         return []
     try:
-        path: list[int] = nx.shortest_path(
+        path: list[str] = nx.shortest_path(
             graph,
-            str(o_stop),
-            str(d_stop),
+            o_stop,
+            d_stop,
             weight="travel_time_min",
         )
         return [int(n) for n in path]
@@ -247,52 +267,59 @@ def assign_network(cfg: dict, scenario: str = "baseline") -> Path:
     # Load transit stop graph if enabled.
     transit_cfg = cfg.get("transit", {})
     transit_graph: nx.DiGraph | None = None
-    transit_zone_to_stop: dict[str, int | None] = {}
+    transit_loc_to_stop: dict[str, str | None] = {}
     if transit_cfg.get("enabled", False):
         tpath = Path(f"data/processed/{name}_transit_stops.graphml")
         transit_graph = _load_transit_graph(tpath)
         if transit_graph is not None:
             transit_trips = trips[trips["mode"] == "transit"]
-            if not transit_trips.empty:
-                all_transit_locs = set(transit_trips["origin"].tolist()) | set(
-                    transit_trips["destination"].tolist()
+            if not transit_trips.empty and "walk" in mode_graphs:
+                walk_graph = mode_graphs["walk"]
+                stop_walk_node_map = _build_stop_walk_node_map(
+                    transit_graph, walk_graph
                 )
-                max_walk_m = float(transit_cfg.get("max_walk_to_stop_m", 800))
-                zone_locs_t = [loc for loc in all_transit_locs if _is_zone_id(loc)]
-                transit_zone_to_stop = _snap_zones_to_transit(
-                    zone_locs_t,
-                    transit_graph,
-                    float(transit_cfg.get("walk_speed_kmh", 5.0)),
-                    max_walk_m,
-                )
-                # Also snap POI transit locations using stored coordinates.
-                import math
-
-                t_node_coords: list[tuple[int, float, float]] = []
-                for nid, data in transit_graph.nodes(data=True):
-                    t_node_coords.append(
-                        (
-                            int(nid),
-                            float(data.get("lat", data.get("y", 0))),
-                            float(data.get("lon", data.get("x", 0))),
-                        )
+                if stop_walk_node_map:
+                    all_transit_locs = set(transit_trips["origin"].tolist()) | set(
+                        transit_trips["destination"].tolist()
                     )
-                for loc in all_transit_locs:
-                    if _is_zone_id(loc):
-                        continue
-                    osm_id = _parse_osm_node_id(loc)
-                    key = str(osm_id) if osm_id is not None else None
-                    if key and key in poi_coords:
-                        e_rd, n_rd = poi_coords[key]
-                        lat_p = 51.5 + (n_rd - 392000) / 111320
-                        lon_p = 3.7 + (e_rd - 21000) / (
-                            111320 * math.cos(math.radians(51.5))
+
+                    # Snap all transit locations (zones + POIs) to walk network.
+                    loc_e: list[float] = []
+                    loc_n: list[float] = []
+                    valid_locs: list[str] = []
+                    for loc in all_transit_locs:
+                        if _is_zone_id(loc):
+                            m = _ZONE_RE.match(loc)
+                            assert m is not None
+                            loc_e.append(int(m.group(1)) * 100 + 50)
+                            loc_n.append(int(m.group(2)) * 100 + 50)
+                            valid_locs.append(loc)
+                        else:
+                            osm_id = _parse_osm_node_id(loc)
+                            key = str(osm_id) if osm_id is not None else None
+                            if key and key in poi_coords:
+                                loc_e.append(poi_coords[key][0])
+                                loc_n.append(poi_coords[key][1])
+                                valid_locs.append(loc)
+
+                    if valid_locs:
+                        walk_nodes = ox.nearest_nodes(walk_graph, loc_e, loc_n)
+                        loc_to_walk_node = dict(zip(valid_locs, walk_nodes))
+                        transit_loc_to_stop = _snap_locs_to_transit_via_walk(
+                            loc_to_walk_node, walk_graph, stop_walk_node_map
                         )
-                        transit_zone_to_stop[loc] = _snap_coord_to_transit(
-                            lat_p, lon_p, t_node_coords, max_walk_m
-                        )
-                    else:
-                        transit_zone_to_stop[loc] = None
+                    # Locations not resolved get None.
+                    for loc in all_transit_locs:
+                        if loc not in transit_loc_to_stop:
+                            transit_loc_to_stop[loc] = None
+
+                    n_snapped = sum(
+                        1 for v in transit_loc_to_stop.values() if v is not None
+                    )
+                    print(
+                        f"Transit: snapped {n_snapped}/{len(transit_loc_to_stop)}"
+                        " locations to stops via walk network"
+                    )
 
     # Pre-compute zone-to-node mapping per road mode so we snap once.
     mode_zone_to_node: dict[str, dict[str, int]] = {}
@@ -352,7 +379,7 @@ def assign_network(cfg: dict, scenario: str = "baseline") -> Path:
         if mode == "transit":
             if transit_graph is not None:
                 path_t = _route_transit_trip(
-                    origin, dest, transit_zone_to_stop, transit_graph
+                    origin, dest, transit_loc_to_stop, transit_graph
                 )
                 route_nodes.append(path_t)
                 distances.append(None)
