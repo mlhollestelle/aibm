@@ -6,6 +6,7 @@ let currentTime = 360; // minutes from midnight (06:00)
 let playbackSpeed = 10; // simulation-minutes per wall-second
 let lastFrameTs = null;
 let animFrameId = null;
+let _tickCallback = null; // stored for startPlayback()
 
 // Time bounds (minutes from midnight)
 const TIME_MIN = 0;
@@ -31,6 +32,8 @@ function formatTime(minutes) {
  * @param {Function} onTick - called each frame with currentTime
  */
 function initControls(onTick) {
+  _tickCallback = onTick;
+
   btnPlay = document.getElementById("btn-play");
   sliderTime = document.getElementById("slider-time");
   labelTime = document.getElementById("label-time");
@@ -62,6 +65,18 @@ function initControls(onTick) {
   sliderTime.value = currentTime;
   labelTime.textContent = formatTime(currentTime);
   onTick(currentTime);
+}
+
+/**
+ * Start playback programmatically (e.g. on page load).
+ * Must be called after initControls().
+ */
+function startPlayback() {
+  if (playing || !btnPlay || !_tickCallback) return;
+  playing = true;
+  btnPlay.textContent = "Pause";
+  lastFrameTs = null;
+  animFrameId = requestAnimationFrame((ts) => tick(ts, _tickCallback));
 }
 
 /**
