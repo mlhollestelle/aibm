@@ -228,6 +228,7 @@ rule simulate:
     output:
         trips=f"data/processed/{NAME}_trips_{{scenario}}.parquet",
         day_plans=f"data/processed/{NAME}_day_plans_{{scenario}}.parquet",
+        activities=f"data/processed/{NAME}_activities_{{scenario}}.parquet",
     shell:
         "uv run python workflow/scripts/simulate.py"
         " --config workflow/config.yaml"
