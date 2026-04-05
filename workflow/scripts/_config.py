@@ -37,13 +37,14 @@ def _resolve_iteration(cfg: dict, iteration_path: Path, config_dir: Path) -> dic
 
 
 def build_scenarios(cfg: dict) -> list[str]:
-    """Build the provider×iteration cross-product from *cfg*.
+    """Build the provider×iteration×policy cross-product from *cfg*.
 
     Respects ``only_iterations`` in provider YAMLs to restrict
     which iterations a provider participates in.
     """
     providers = cfg.get("providers", [])
     iterations = cfg.get("iterations", ["baseline"])
+    policies = cfg.get("policies", ["baseline"])
     scenarios: list[str] = []
     for p in providers:
         p_path = Path("workflow/providers") / f"{p}.yaml"
@@ -55,7 +56,8 @@ def build_scenarios(cfg: dict) -> list[str]:
             allowed = iterations
         for i in iterations:
             if i in allowed:
-                scenarios.append(f"{p}__{i}")
+                for pol in policies:
+                    scenarios.append(f"{p}__{i}__{pol}")
     return scenarios
 
 
@@ -81,7 +83,9 @@ def load_config(default: str = "workflow/config.yaml") -> dict:
     config_dir = Path(args.config).parent
 
     if "__" in args.scenario:
-        provider, iteration = args.scenario.split("__", 1)
+        parts = args.scenario.split("__")
+        provider, iteration = parts[0], parts[1]
+        policy = parts[2] if len(parts) >= 3 else "baseline"
 
         # 1. Merge provider config
         provider_path = config_dir / "providers" / f"{provider}.yaml"
@@ -94,6 +98,13 @@ def load_config(default: str = "workflow/config.yaml") -> dict:
         # 2. Merge iteration config (with prompt-config resolution)
         iteration_path = config_dir / "iterations" / f"{iteration}.yaml"
         cfg = _resolve_iteration(cfg, iteration_path, config_dir)
+
+        # 3. Merge policy config (highest priority — overrides everything)
+        policy_path = config_dir / "policies" / f"{policy}.yaml"
+        with open(policy_path) as f:
+            pol_cfg = yaml.safe_load(f) or {}
+        if pol_cfg:
+            cfg = _deep_merge(cfg, pol_cfg)
     else:
         # Legacy: flat scenario in workflow/scenarios/
         scenario_path = config_dir / "scenarios" / f"{args.scenario}.yaml"

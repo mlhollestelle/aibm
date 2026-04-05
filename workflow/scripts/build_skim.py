@@ -41,6 +41,11 @@ def parse_args() -> argparse.Namespace:
         required=True,
         help="Transport mode (car, bike, or walk).",
     )
+    parser.add_argument(
+        "--policy",
+        default="baseline",
+        help="Policy name used for config overrides and output filename.",
+    )
     return parser.parse_known_args()[0]
 
 
@@ -130,7 +135,7 @@ def _centroids_from_zone_ids(
     return eastings, northings
 
 
-def build_skim(mode: str, cfg: dict) -> Path:
+def build_skim(mode: str, cfg: dict, policy: str = "baseline") -> Path:
     """Compute skim matrix and write OMX file."""
     name = cfg["study_area"]["name"]
     net_cfg = cfg["network"]
@@ -191,7 +196,7 @@ def build_skim(mode: str, cfg: dict) -> Path:
 
     np.fill_diagonal(matrix, 0.0)
 
-    output = Path(f"data/processed/{name}_skim_{mode}.omx")
+    output = Path(f"data/processed/{name}_skim_{mode}_{policy}.omx")
     output.parent.mkdir(parents=True, exist_ok=True)
 
     with omx.open_file(str(output), "w") as f:
@@ -217,4 +222,14 @@ def build_skim(mode: str, cfg: dict) -> Path:
 if __name__ == "__main__":
     args = parse_args()
     cfg = load_config()
-    build_skim(args.mode, cfg)
+    if args.policy != "baseline":
+        policy_path = Path("workflow/policies") / f"{args.policy}.yaml"
+        with open(policy_path) as _f:
+            import yaml as _yaml
+
+            pol_cfg = _yaml.safe_load(_f) or {}
+        if pol_cfg:
+            from _config import _deep_merge
+
+            cfg = _deep_merge(cfg, pol_cfg)
+    build_skim(args.mode, cfg, policy=args.policy)

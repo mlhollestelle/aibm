@@ -51,10 +51,10 @@ simulation:
   rate_limit_rpm: 500
   # Zones offered per work/school choice. Higher = better quality but
   # more tokens per call. 10-15 is a good range.
-  n_zone_candidates: 12
+  n_zone_candidates: 30
   # POIs offered per discretionary destination choice. Higher = better
   # quality but more tokens per call. 10-15 is a good range.
-  n_poi_candidates: 10
+  n_poi_candidates: 30
   # Concurrent households in the thread pool. Higher = faster but more
   # API pressure. Keep ≤ rate_limit_rpm / 10.
   max_workers: 4
@@ -224,6 +224,9 @@ providers:
 iterations:
   - baseline
   - v1_trip_rate
+
+policies:
+  - baseline
 
 transit:
   # Set enabled: false to exclude transit from the simulation entirely.

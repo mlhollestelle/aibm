@@ -1,8 +1,9 @@
-"""Plot mode share by provider and iteration as a faceted bar chart.
+"""Plot mode share by provider, iteration and policy as a faceted bar chart.
 
-Reads all assigned-trips parquets for the configured provider×iteration
-matrix, computes each mode's share, and saves a PNG.  Facet columns
-represent iterations; within each facet the x-axis shows providers.
+Reads all assigned-trips parquets for the configured
+provider×iteration×policy matrix, computes each mode's share, and saves
+a PNG.  Facet columns represent iterations; within each facet the x-axis
+shows providers (grouped by policy when multiple policies are active).
 
 Usage:
     uv run python workflow/scripts/plot_mode_shares.py \\
@@ -60,7 +61,7 @@ def plot_mode_share(
 ) -> None:
     """Render a faceted grouped bar chart and save as PNG.
 
-    One facet per iteration; x-axis = provider; hue = mode.
+    One facet per iteration; x-axis = provider / policy; hue = mode.
     """
     sns.set_theme(style="whitegrid")
     n_iter = len(iterations)
@@ -77,14 +78,14 @@ def plot_mode_share(
         subset = mode_share[mode_share["iteration"] == iteration]
         sns.barplot(
             data=subset,
-            x="provider",
+            x="provider_policy",
             y="share",
             hue="mode",
             palette=MODE_COLORS,
             ax=ax,
         )
         ax.set_title(iteration)
-        ax.set_xlabel("Provider")
+        ax.set_xlabel("Provider / Policy")
         ax.set_ylabel("Share (%)" if col == 0 else "")
         ax.tick_params(axis="x", rotation=30)
         # Only show legend on the last facet
@@ -97,7 +98,7 @@ def plot_mode_share(
                 loc="upper left",
             )
 
-    fig.suptitle("Mode share by provider and iteration", y=1.02)
+    fig.suptitle("Mode share by provider, iteration and policy", y=1.02)
     plt.tight_layout()
     output.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output, dpi=150, bbox_inches="tight")
@@ -118,16 +119,21 @@ def main() -> None:
         path = data_dir / f"{name}_assigned_trips_{scenario}.parquet"
         df = pd.read_parquet(path, columns=["mode"])
         df["scenario"] = scenario
-        provider, iteration = scenario.split("__", 1)
-        df["provider"] = provider
-        df["iteration"] = iteration
+        parts = scenario.split("__")
+        df["provider"] = parts[0]
+        df["iteration"] = parts[1]
+        df["policy"] = parts[2] if len(parts) >= 3 else "baseline"
         frames.append(df)
 
     trips = pd.concat(frames, ignore_index=True)
     mode_share = compute_mode_share(trips)
-    # Add provider/iteration columns to mode_share
-    mode_share[["provider", "iteration"]] = mode_share["scenario"].str.split(
-        "__", n=1, expand=True
+    # Add provider/iteration/policy columns to mode_share
+    _parts = mode_share["scenario"].str.split("__", expand=True)
+    mode_share["provider"] = _parts[0]
+    mode_share["iteration"] = _parts[1]
+    mode_share["policy"] = _parts[2].fillna("baseline")
+    mode_share["provider_policy"] = (
+        mode_share["provider"] + " / " + mode_share["policy"]
     )
     plot_mode_share(mode_share, iterations, Path(args.output))
 

@@ -102,7 +102,7 @@ def plot_trips_per_person(
         fig.legend(
             handles,
             labels,
-            title="Iteration",
+            title="Variant",
             loc="lower center",
             ncol=len(iterations),
             bbox_to_anchor=(0.5, -0.02),
@@ -126,7 +126,6 @@ def main() -> None:
     name = cfg["study_area"]["name"]
     scenarios = build_scenarios(cfg)
     providers = cfg.get("providers", [])
-    iterations = cfg.get("iterations", ["baseline"])
     data_dir = Path("data/processed")
 
     # Only include providers that appear in actual scenarios
@@ -138,10 +137,21 @@ def main() -> None:
         path = data_dir / f"{name}_assigned_trips_{scenario}.parquet"
         df = pd.read_parquet(path, columns=["agent_id"])
         df["scenario"] = scenario
-        provider, iteration = scenario.split("__", 1)
-        df["provider"] = provider
-        df["iteration"] = iteration
+        parts = scenario.split("__")
+        df["provider"] = parts[0]
+        iteration = parts[1]
+        policy = parts[2] if len(parts) >= 3 else "baseline"
+        df["iteration"] = f"{iteration} / {policy}"
         frames.append(df)
+
+    # Build ordered variant list preserving iteration×policy order
+    seen: dict[str, None] = {}
+    for s in scenarios:
+        parts = s.split("__")
+        it = parts[1]
+        pol = parts[2] if len(parts) >= 3 else "baseline"
+        seen[f"{it} / {pol}"] = None
+    variants = list(seen)
 
     trips = pd.concat(frames, ignore_index=True)
     trips_per_agent = (
@@ -150,7 +160,7 @@ def main() -> None:
         .reset_index(name="n_trips")
     )
 
-    plot_trips_per_person(trips_per_agent, providers, iterations, Path(args.output))
+    plot_trips_per_person(trips_per_agent, providers, variants, Path(args.output))
 
 
 if __name__ == "__main__":
