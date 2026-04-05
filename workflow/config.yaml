@@ -219,7 +219,7 @@ providers:
   - claude_haiku_4_5
   - grok_4_1_fast_non_reasoning
   - grok_4_1_fast_reasoning
-  - gemini_2_0_flash
+  - gemini_2_5_flash_lite
 
 iterations:
   - baseline
