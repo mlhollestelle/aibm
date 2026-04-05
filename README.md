@@ -240,11 +240,12 @@ specific iterations via `only_iterations:` in their provider YAML.
 #### Adding a prompt variant (iteration)
 
 1. Create `workflow/iterations/my_variant.yaml` (can override any
-   `simulation:` key or include shared prompt configs):
+   `simulation:` key):
    ```yaml
    simulation:
      prompts:
-       mode_choice: "..."
+       mode_choice:
+         instructions: "..."
    ```
 2. Add `my_variant` to the `iterations:` list in `workflow/config.yaml`.
 
