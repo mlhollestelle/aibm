@@ -60,6 +60,32 @@ def _node_lookup(nodes_path: Path) -> dict[int, list[float]]:
     return lookup
 
 
+def _poi_lookup(pois_path: Path) -> dict[int, list[float]]:
+    """Build {osmid: [lon, lat]} from POI parquet (EPSG:28992 → WGS84)."""
+    if not pois_path.exists():
+        return {}
+    gdf = gpd.read_parquet(pois_path).to_crs("EPSG:4326")
+    return {
+        int(row["osmid"]): [round(row.geometry.x, 6), round(row.geometry.y, 6)]
+        for _, row in gdf.iterrows()
+    }
+
+
+def _resolve_location(
+    loc: str,
+    zone_lut: dict[str, list[float]],
+    poi_lut: dict[int, list[float]],
+) -> list[float] | None:
+    """Resolve a location string → [lon, lat], trying zone then POI."""
+    coords = zone_lut.get(loc)
+    if coords is not None:
+        return coords
+    m = re.match(r"^(\d+)", loc)
+    if m:
+        return poi_lut.get(int(m.group(1)))
+    return None
+
+
 # ── exports ──────────────────────────────────────────
 
 
@@ -184,6 +210,7 @@ def export_trips(
     trips_path: Path,
     node_lut: dict[int, list[float]],
     zone_lut: dict[str, list[float]],
+    poi_lut: dict[int, list[float]],
     mode_graphs: dict[str, nx.MultiDiGraph],
     out_path: Path,
 ) -> None:
@@ -191,19 +218,33 @@ def export_trips(
     df = pd.read_parquet(trips_path)
     has_buurt = "origin_buurt" in df.columns
     trips = []
+
+    # Diagnostic counters
+    n_total = len(df)
+    n_no_mode = 0
+    n_routed: dict[str, int] = {}  # mode → count with real route
+    n_straight: dict[str, int] = {}  # mode → count falling back to straight line
+    n_skipped: dict[str, int] = {}  # reason → count (skipped entirely)
+
     for _, row in df.iterrows():
         route_nodes = row["route_nodes"]
         departure = row["departure_time"]
         mode = row["mode"] if pd.notna(row["mode"]) else None
 
+        if mode is None:
+            n_no_mode += 1
+
         # Transit routes use stop-graph node IDs, not road node IDs, so they
         # are always rendered as a straight line between zone centroids.
         if mode == "transit":
-            o = zone_lut.get(str(row["origin"]))
-            d = zone_lut.get(str(row["destination"]))
+            o = _resolve_location(str(row["origin"]), zone_lut, poi_lut)
+            d = _resolve_location(str(row["destination"]), zone_lut, poi_lut)
             if o and d:
                 coords = [o, d]
+                n_straight[mode] = n_straight.get(mode, 0) + 1
             else:
+                reason = "transit_no_zone"
+                n_skipped[reason] = n_skipped.get(reason, 0) + 1
                 print(
                     f"Warning: skipping transit trip {row['agent_id']} "
                     f"{row['origin']} → {row['destination']} (no zone centroids)"
@@ -219,16 +260,23 @@ def export_trips(
 
             # Fallback: straight line from origin to destination
             if len(coords) < 2:
-                o = zone_lut.get(str(row["origin"]))
-                d = zone_lut.get(str(row["destination"]))
+                o = _resolve_location(str(row["origin"]), zone_lut, poi_lut)
+                d = _resolve_location(str(row["destination"]), zone_lut, poi_lut)
                 if o and d:
                     coords = [o, d]
+                    key = mode or "no_mode"
+                    n_straight[key] = n_straight.get(key, 0) + 1
                 else:
+                    key = f"no_zone_{mode or 'no_mode'}"
+                    n_skipped[key] = n_skipped.get(key, 0) + 1
                     print(
                         f"Warning: no route for trip {row['agent_id']} "
                         f"{row['origin']} → {row['destination']}, skipping"
                     )
                     continue
+            else:
+                key = mode or "no_mode"
+                n_routed[key] = n_routed.get(key, 0) + 1
 
         # Compute arrival time from graph edge weights
         arrival = None
@@ -283,19 +331,27 @@ def export_trips(
         )
     with open(out_path, "w") as f:
         json.dump(trips, f)
+
+    n_skipped_total = sum(n_skipped.values())
     print(f"Wrote {len(trips)} trips to {out_path}")
+    print(f"  Total rows: {n_total}  |  no mode: {n_no_mode}")
+    print(f"  Routed (real geometry): {n_routed}")
+    print(f"  Straight-line fallback: {n_straight}")
+    if n_skipped:
+        print(f"  Skipped entirely ({n_skipped_total}): {n_skipped}")
 
 
 def export_activities(
     activities_path: Path,
     zone_lut: dict[str, list[float]],
+    poi_lut: dict[int, list[float]],
     out_path: Path,
 ) -> None:
     """Write activities.json with WGS84 locations."""
     df = pd.read_parquet(activities_path)
     activities = []
     for _, row in df.iterrows():
-        loc = zone_lut.get(str(row["location"]))
+        loc = _resolve_location(str(row["location"]), zone_lut, poi_lut)
         if loc is None:
             continue
         activities.append(
@@ -350,6 +406,10 @@ def main() -> None:
     zone_lut = _zone_centroids_wgs84(zone_ids)
     print(f"Zone lookup: {len(zone_lut)} zones")
 
+    # 2b. POI coordinate lookup
+    poi_lut = _poi_lookup(data_dir / f"{name}_pois.parquet")
+    print(f"POI lookup: {len(poi_lut)} POIs")
+
     # 3. Zone name lookup — buurt_name added to zone specs during pipeline
     zone_name_lut: dict[str, str] = {}
     if "buurt_name" in specs.columns:
@@ -399,6 +459,7 @@ def main() -> None:
         data_dir / f"{name}_assigned_trips_{scenario}.parquet",
         node_lut,
         zone_lut,
+        poi_lut,
         mode_graphs,
         OUT_DIR / "trips.json",
     )
@@ -407,6 +468,7 @@ def main() -> None:
     export_activities(
         data_dir / f"{name}_activities_{scenario}.parquet",
         zone_lut,
+        poi_lut,
         OUT_DIR / "activities.json",
     )
 
