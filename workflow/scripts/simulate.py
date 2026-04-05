@@ -214,6 +214,7 @@ def _build_agent_plan(
     skims: list[Skim],
     client: LLMClient,
     n_zone_candidates: int,
+    n_poi_candidates: int = 10,
     work_counts: dict[str, int] | None = None,
     school_counts: dict[str, int] | None = None,
     pc: PromptConfig | None = None,
@@ -303,6 +304,7 @@ def _build_agent_plan(
             pois_by_type,
             skims,
             client=client,
+            n_candidates=n_poi_candidates,
             time_windows=time_windows,
             step=pc.discretionary,
         )
@@ -534,6 +536,7 @@ def _simulate_agent(
     skims: list[Skim],
     client: LLMClient,
     n_zone_candidates: int,
+    n_poi_candidates: int = 10,
     vehicle_access: list[bool] | None = None,
     pc: PromptConfig | None = None,
 ) -> tuple[list[dict], dict, list[dict]]:
@@ -548,6 +551,8 @@ def _simulate_agent(
         client: LLM client (may be a RateLimiter).
         n_zone_candidates: Max zones offered for work/school
             choice.
+        n_poi_candidates: Max POIs offered per discretionary
+            destination choice.
         vehicle_access: Per-tour vehicle access (True/False).
             When *None*, falls back to
             ``hh.num_vehicles > 0``.
@@ -569,6 +574,7 @@ def _simulate_agent(
         skims,
         client,
         n_zone_candidates,
+        n_poi_candidates,
         pc=pc,
     )
 
@@ -595,6 +601,7 @@ def _simulate_household(
     skims: list[Skim],
     client: LLMClient,
     n_zone_candidates: int,
+    n_poi_candidates: int = 10,
     model: str = "gpt-4o-mini",
     work_counts: dict[str, int] | None = None,
     school_counts: dict[str, int] | None = None,
@@ -612,6 +619,8 @@ def _simulate_household(
         skims: Skim matrices (one per mode).
         client: LLM client (may be a RateLimiter).
         n_zone_candidates: Max zones offered for work/school choice.
+        n_poi_candidates: Max POIs offered per discretionary
+            destination choice.
         model: LLM model name forwarded to household-level calls.
         work_counts: Zone-level POI counts for work zones.
         school_counts: Zone-level POI counts for school zones.
@@ -638,6 +647,7 @@ def _simulate_household(
             skims,
             client,
             n_zone_candidates,
+            n_poi_candidates,
             work_counts=work_counts,
             school_counts=school_counts,
             pc=pc,
@@ -808,6 +818,7 @@ def simulate(cfg: dict, scenario: str = "baseline") -> None:
     sim = cfg["simulation"]
     model: str = sim["model"]
     n_zone_candidates: int = sim["n_zone_candidates"]
+    n_poi_candidates: int = sim.get("n_poi_candidates", 10)
 
     sample = pd.read_parquet(f"data/processed/{name}_sample.parquet")
     all_pois = load_pois(f"data/processed/{name}_pois.parquet")
@@ -884,6 +895,7 @@ def simulate(cfg: dict, scenario: str = "baseline") -> None:
                 skims,
                 client,
                 n_zone_candidates,
+                n_poi_candidates,
                 model,
                 work_counts,
                 school_counts,
