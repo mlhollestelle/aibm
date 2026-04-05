@@ -14,10 +14,11 @@ TRANSIT = config.get("transit", {}).get("enabled", False)
 
 PROVIDERS = config.get("providers", [])
 ITERATIONS = config.get("iterations", ["baseline"])
+POLICIES = config.get("policies", ["baseline"])
 
 
 def _build_scenarios():
-    """Build provider×iteration cross-product, respecting only_iterations."""
+    """Build provider×iteration×policy cross-product, respecting only_iterations."""
     scenarios = []
     for p in PROVIDERS:
         p_path = f"workflow/providers/{p}.yaml"
@@ -26,7 +27,8 @@ def _build_scenarios():
         allowed = p_cfg.get("only_iterations", ITERATIONS)
         for i in ITERATIONS:
             if i in allowed:
-                scenarios.append(f"{p}__{i}")
+                for pol in POLICIES:
+                    scenarios.append(f"{p}__{i}__{pol}")
     return scenarios
 
 
@@ -41,11 +43,21 @@ def _iteration(scenario):
     return scenario.split("__")[1]
 
 
+def _policy(scenario):
+    parts = scenario.split("__")
+    return parts[2] if len(parts) >= 3 else "baseline"
+
+
 rule all:
     input:
         f"data/processed/{NAME}_population.parquet",
         f"data/processed/{NAME}_population_report.txt",
-        expand("data/processed/{NAME}_skim_{mode}.omx", NAME=NAME, mode=MODES),
+        expand(
+            "data/processed/{NAME}_skim_{mode}_{policy}.omx",
+            NAME=NAME,
+            mode=[m for m in MODES if m != "transit"],
+            policy=POLICIES,
+        ),
         expand(
             "data/processed/{NAME}_network_{mode}_nodes.parquet",
             NAME=NAME,
@@ -96,12 +108,14 @@ rule build_skim:
         network=f"data/processed/{NAME}_network_{{mode}}.graphml",
         grid=f"data/processed/{NAME}_grid_clean.parquet",
     output:
-        f"data/processed/{NAME}_skim_{{mode}}.omx",
+        f"data/processed/{NAME}_skim_{{mode}}_{{policy}}.omx",
     wildcard_constraints:
         mode="car|bike|walk",
+        policy="[a-z0-9_]+",
     shell:
         "uv run python workflow/scripts/build_skim.py"
         " --mode {wildcards.mode}"
+        " --policy {wildcards.policy}"
         " --config workflow/config.yaml"
 
 
@@ -199,14 +213,18 @@ rule simulate:
         sample=f"data/processed/{NAME}_sample.parquet",
         pois=f"data/processed/{NAME}_pois.parquet",
         zone_specs=f"data/processed/{NAME}_zone_specs.parquet",
-        skims=expand(
-            "data/processed/{NAME}_skim_{mode}.omx", NAME=NAME, mode=MODES
+        skims=lambda wc: expand(
+            "data/processed/{NAME}_skim_{mode}_{policy}.omx",
+            NAME=NAME,
+            mode=[m for m in MODES if m != "transit"],
+            policy=_policy(wc.scenario),
         ),
         skim_transit=(
             [f"data/processed/{NAME}_skim_transit.omx"] if TRANSIT else []
         ),
         provider_yaml=lambda wc: f"workflow/providers/{_provider(wc.scenario)}.yaml",
         iteration_yaml=lambda wc: f"workflow/iterations/{_iteration(wc.scenario)}.yaml",
+        policy_yaml=lambda wc: f"workflow/policies/{_policy(wc.scenario)}.yaml",
     output:
         trips=f"data/processed/{NAME}_trips_{{scenario}}.parquet",
         day_plans=f"data/processed/{NAME}_day_plans_{{scenario}}.parquet",

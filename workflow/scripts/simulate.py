@@ -824,9 +824,12 @@ def simulate(cfg: dict, scenario: str = "baseline") -> None:
     all_pois = load_pois(f"data/processed/{name}_pois.parquet")
     zone_specs = pd.read_parquet(f"data/processed/{name}_zone_specs.parquet")
 
+    _scenario_parts = scenario.split("__")
+    _policy = _scenario_parts[2] if len(_scenario_parts) >= 3 else "baseline"
     skims: list[Skim] = [
-        load_skim(f"data/processed/{name}_skim_{mode}.omx", mode)
+        load_skim(f"data/processed/{name}_skim_{mode}_{_policy}.omx", mode)
         for mode in cfg["network"]["modes"]
+        if mode != "transit"
     ]
 
     transit_cfg = cfg.get("transit", {})

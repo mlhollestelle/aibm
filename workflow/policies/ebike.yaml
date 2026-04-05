@@ -1,0 +1,3 @@
+# E-bike policy: models widespread e-bike adoption (+30% cycling speed).
+network:
+  bike_speed_kmh: 23.4
