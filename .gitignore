@@ -45,6 +45,9 @@ Thumbs.db
 # Snakemake
 .snakemake/
 
+# Simulation run logs
+logs/
+
 # LLM response cache
 cache/
 
