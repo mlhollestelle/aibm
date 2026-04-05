@@ -52,6 +52,9 @@ simulation:
   # Zones offered per work/school choice. Higher = better quality but
   # more tokens per call. 10-15 is a good range.
   n_zone_candidates: 12
+  # POIs offered per discretionary destination choice. Higher = better
+  # quality but more tokens per call. 10-15 is a good range.
+  n_poi_candidates: 10
   # Concurrent households in the thread pool. Higher = faster but more
   # API pressure. Keep ≤ rate_limit_rpm / 10.
   max_workers: 4
