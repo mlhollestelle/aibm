@@ -1225,6 +1225,7 @@ class Agent:
                 f"{act_type}.end_time",
                 disc_ctx,
             )
+            act.reasoning = item.get("reasoning", "")
 
         return discretionary, prompt
 

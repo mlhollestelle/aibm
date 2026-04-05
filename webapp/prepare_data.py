@@ -262,8 +262,7 @@ def export_trips(
                 "route": coords,
                 "joint_ride_id": (
                     str(row["joint_ride_id"])
-                    if "joint_ride_id" in df.columns
-                    and pd.notna(row["joint_ride_id"])
+                    if "joint_ride_id" in df.columns and pd.notna(row["joint_ride_id"])
                     else None
                 ),
             }
@@ -293,6 +292,13 @@ def export_activities(
                 "location": loc,
                 "start": row["start_time"],
                 "end": row["end_time"],
+                "reasoning": (
+                    str(row["reasoning"])
+                    if "reasoning" in df.columns
+                    and pd.notna(row["reasoning"])
+                    and row["reasoning"]
+                    else None
+                ),
             }
         )
     with open(out_path, "w") as f:

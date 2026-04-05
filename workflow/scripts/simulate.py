@@ -370,6 +370,7 @@ def _build_agent_plan(
             "end_time": act.end_time,
             "is_flexible": act.is_flexible,
             "is_joint": act.is_joint,
+            "reasoning": act.reasoning,
         }
         for i, act in enumerate(day_plan.activities)
     ]
@@ -689,6 +690,7 @@ def _simulate_household(
             for ja in joint:
                 for agent, day_plan, dpr, _ in agent_plans:
                     if agent.id in ja.participant_ids and day_plan is not None:
+                        ja.activity.reasoning = ja.reasoning
                         day_plan.inject_joint(ja.activity)
                         # Rebuild tours.
                         day_plan.tours = []
