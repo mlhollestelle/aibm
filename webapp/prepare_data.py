@@ -196,25 +196,39 @@ def export_trips(
         departure = row["departure_time"]
         mode = row["mode"] if pd.notna(row["mode"]) else None
 
-        # Build route coordinates from node IDs
-        coords = []
-        for nid in route_nodes:
-            pt = node_lut.get(int(nid))
-            if pt:
-                coords.append(pt)
-
-        # Fallback: straight line from origin to destination
-        if len(coords) < 2:
+        # Transit routes use stop-graph node IDs, not road node IDs, so they
+        # are always rendered as a straight line between zone centroids.
+        if mode == "transit":
             o = zone_lut.get(str(row["origin"]))
             d = zone_lut.get(str(row["destination"]))
             if o and d:
                 coords = [o, d]
             else:
                 print(
-                    f"Warning: no route for trip {row['agent_id']} "
-                    f"{row['origin']} → {row['destination']}, skipping"
+                    f"Warning: skipping transit trip {row['agent_id']} "
+                    f"{row['origin']} → {row['destination']} (no zone centroids)"
                 )
                 continue
+        else:
+            # Build route coordinates from road network node IDs
+            coords = []
+            for nid in route_nodes:
+                pt = node_lut.get(int(nid))
+                if pt:
+                    coords.append(pt)
+
+            # Fallback: straight line from origin to destination
+            if len(coords) < 2:
+                o = zone_lut.get(str(row["origin"]))
+                d = zone_lut.get(str(row["destination"]))
+                if o and d:
+                    coords = [o, d]
+                else:
+                    print(
+                        f"Warning: no route for trip {row['agent_id']} "
+                        f"{row['origin']} → {row['destination']}, skipping"
+                    )
+                    continue
 
         # Compute arrival time from graph edge weights
         arrival = None
