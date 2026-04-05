@@ -3,9 +3,9 @@
 An agent-based travel demand model that replaces traditional discrete
 choice models (logit, nested logit) with LLM prompts. Each synthetic
 agent is given a persona and asked — via structured LLM calls — to
-choose a work/school location, generate activities, schedule them,
-pick destinations, and select travel modes. The result is a full set
-of daily trip chains that can be assigned to a road network.
+choose a work/school location, generate activities, schedule them, pick
+destinations, and select travel modes. The result is a full set of daily
+trip chains that can be assigned to a road network.
 
 ## Prerequisites
 
@@ -13,7 +13,8 @@ of daily trip chains that can be assigned to a road network.
 - [uv](https://docs.astral.sh/uv/) package manager
 - An API key for at least one supported LLM provider
 
-This project uses LLMs to power agent decisions. It supports four providers:
+This project uses LLMs to power agent decisions. It supports four
+providers:
 
 - [Gemini API](https://aistudio.google.com/) (default)
 - [Anthropic API](https://platform.claude.com/)
@@ -36,11 +37,13 @@ export OPENAI_API_KEY=your_key_here
 export XAI_API_KEY=your_key_here
 ```
 
-To make this permanent, add the line to your shell config (e.g. `~/.bashrc` or `~/.zshrc`).
+To make this permanent, add the line to your shell config (e.g.
+`~/.bashrc` or `~/.zshrc`).
 
-The provider is selected automatically based on the model name. Names starting
-with `claude` use Anthropic; names starting with `gpt-`, `o1`, or `o3` use
-OpenAI; names starting with `grok-` use xAI; everything else uses Gemini:
+The provider is selected automatically based on the model name. Names
+starting with `claude` use Anthropic; names starting with `gpt-`, `o1`,
+or `o3` use OpenAI; names starting with `grok-` use xAI; everything else
+uses Gemini:
 
 ```python
 from aibm import Agent
@@ -96,14 +99,20 @@ uv run python scripts/example.py
 Rough estimates for simulating 200 households (~500 agents) on the
 Walcheren example model:
 
-| Model | Approximate cost | Notes |
-|-------|-----------------|-------|
-| `gpt-4o-mini` | ~$0.50–1.00 | Recommended for development |
-| `gemini-2.5-flash-lite` | ~$0.30–0.80 | Good budget option |
-| `gpt-4o` | ~$5–10 | Higher quality, much more expensive |
-| `claude-sonnet-4-20250514` | ~$5–10 | Similar to gpt-4o |
+<<<<<<< Updated upstream | Model | Approximate cost | Notes |
+|-------|-----------------|-------| | `gpt-4o-mini` | ~$0.50–1.00 |
+Recommended for development | | `gemini-2.5-flash-lite` | ~$0.30–0.80 |
+Good budget option | | `gpt-4o` | ~$5–10 | Higher quality, much more
+expensive | | `claude-sonnet-4-20250514` | ~$5–10 | Similar to gpt-4o |
+======= | Model | Approximate cost | Notes | |
+-------------------------- | ---------------- |
+----------------------------------- | | `gpt-4o-mini` | ~$0.50–1.00 |
+Recommended for development | | `gemini-2.5-flash-lite` | ~$0.20-0.30 |
+Good budget option | | `gpt-4o` | ~$5–10 | Higher quality, much more
+expensive | | `claude-sonnet-4-20250514` | ~$5–10 | Similar to gpt-4o |
 | `claude-haiku` | ~$3.60 | |
 
+> > > > > > > Stashed changes
 
 Costs depend on prompt complexity and number of discretionary activities
 generated. The `n_households` setting in `workflow/config.yaml` controls
@@ -123,9 +132,11 @@ Launch JupyterLab:
 uv run jupyter lab
 ```
 
-The `notebooks/` directory contains hands-on explorations of the model components:
+The `notebooks/` directory contains hands-on explorations of the model
+components:
 
-- **synthetic_population.ipynb** — manually build a small population of zones, households, and agents
+- **synthetic_population.ipynb** — manually build a small population of
+  zones, households, and agents
 
 ## Lint and format
 
@@ -134,7 +145,8 @@ uv run ruff check src tests
 uv run ruff format src tests
 ```
 
-Activate pre-commit hooks (runs ruff automatically on every `git commit`):
+Activate pre-commit hooks (runs ruff automatically on every
+`git commit`):
 
 ```sh
 uv run pre-commit install
@@ -166,13 +178,13 @@ flowchart TD
 
 ## Example model
 
-The package is used to develop an example model for the Walcheren
-region in the Netherlands. Walcheren consists of municipalities
-Middelburg, Veere and Vlissingen.
+The package is used to develop an example model for the Walcheren region
+in the Netherlands. Walcheren consists of municipalities Middelburg,
+Veere and Vlissingen.
 
 ### Input data
 
-* Demographic data for population synthesis from
+- Demographic data for population synthesis from
   [CBS Vierkantstatistieken](https://download.cbs.nl/vierkant/100/2025-cbs_vk100_2024_v1.zip).
   Place the zip in `data/raw/`.
 
@@ -187,11 +199,11 @@ uv run snakemake --cores 1 -s workflow/Snakefile
 
 The pipeline steps are:
 
-1. **download_boundaries** — fetch Walcheren municipality
-   polygons from PDOK
+1. **download_boundaries** — fetch Walcheren municipality polygons from
+   PDOK
 2. **filter_grid** — spatial-filter CBS 100m grid to Walcheren
-3. **clean** — handle anonymisation, remap age groups, derive
-   household size distributions
+3. **clean** — handle anonymisation, remap age groups, derive household
+   size distributions
 4. **build_specs** — convert cleaned data to ZoneSpec objects
 5. **synthesize** — generate synthetic population
 
@@ -201,26 +213,33 @@ Output lands in `data/processed/walcheren_population.parquet`.
 
 The pipeline runs a full cross-product of three independent dimensions.
 Expensive shared steps (network download, grid processing, population
-synthesis) run once; skim matrices are shared across providers and
-iterations but are rebuilt per policy; `simulate` and `assign_network`
-re-run for every scenario combination.
+synthesis, skim matrices, POIs) run once and are reused. Only `simulate`
+and `assign_network` re-run per scenario.
 
-#### Scenario dimensions
+**How it works:**
 
-| Dimension | Directory | Controls |
-|-----------|-----------|----------|
-| **Provider** | `workflow/providers/` | LLM model, API key, rate limits |
-| **Iteration** | `workflow/iterations/` | Prompt variants and simulation settings |
-| **Policy** | `workflow/policies/` | Network/infrastructure interventions |
+<<<<<<< Updated upstream
 
-Scenario IDs are `{provider}__{iteration}__{policy}` (double-underscore
-separator). Output files are suffixed with the full ID, e.g.
-`walcheren_assigned_trips_gpt_4o_mini__baseline__baseline.parquet`.
+- `workflow/config.yaml` is the base config with a `scenarios:` list
+- Each scenario has a YAML file in `workflow/scenarios/<name>.yaml` that
+  overrides only the `simulation:` block
+- # Scenario outputs are suffixed: `walcheren_assigned_trips_<name>.parquet`
+  | Dimension     | Directory              | Controls                                |
+  | ------------- | ---------------------- | --------------------------------------- |
+  | **Provider**  | `workflow/providers/`  | LLM model, API key, rate limits         |
+  | **Iteration** | `workflow/iterations/` | Prompt variants and simulation settings |
+  | **Policy**    | `workflow/policies/`   | Network/infrastructure interventions    |
+  > > > > > > > Stashed changes
 
-Config is merged in order — base → provider → iteration → policy — so
-policy overrides take highest priority.
+The `baseline` scenario ships with the project and applies no overrides.
 
-**Active scenarios** are controlled by three lists in `workflow/config.yaml`:
+**Adding a scenario** (e.g. to test a different model):
+
+<<<<<<< Updated upstream
+
+1. # Create `workflow/scenarios/my_scenario.yaml`:
+   **Active scenarios** are controlled by three lists in
+   `workflow/config.yaml`:
 
 ```yaml
 providers:
@@ -241,20 +260,25 @@ specific iterations via `only_iterations:` in their provider YAML.
 
 1. Create `workflow/iterations/my_variant.yaml` (can override any
    `simulation:` key):
+   > > > > > > > Stashed changes
    ```yaml
    simulation:
      prompts:
        mode_choice:
          instructions: "..."
    ```
-2. Add `my_variant` to the `iterations:` list in `workflow/config.yaml`.
+   <<<<<<< Updated upstream
+2. # Add it to `workflow/config.yaml`:
+3. Add `my_variant` to the `iterations:` list in `workflow/config.yaml`.
 
 #### Adding a policy
 
 Policies model real-world transport interventions by overriding network
-or transit config. Any key from `workflow/config.yaml` can be overridden.
+or transit config. Any key from `workflow/config.yaml` can be
+overridden.
 
 1. Create `workflow/policies/my_policy.yaml`:
+   > > > > > > > Stashed changes
    ```yaml
    # Example: e-bike adoption raises cycling speed by 30 %
    network:
@@ -272,7 +296,8 @@ always be present.
 
 Visualise simulation results on an interactive map.
 
-**Prepare the data** (converts pipeline parquet output to JSON for the browser):
+**Prepare the data** (converts pipeline parquet output to JSON for the
+browser):
 
 ```sh
 # For a specific scenario (provider__iteration__policy)
@@ -281,8 +306,8 @@ uv run python webapp/prepare_data.py \
     --scenario gpt_4o_mini__baseline__baseline
 ```
 
-The app is fully static — open `webapp/static/index.html` directly in your
-browser, or serve it with any static file server:
+The app is fully static — open `webapp/static/index.html` directly in
+your browser, or serve it with any static file server:
 
 ```sh
 # Python's built-in server
@@ -293,7 +318,10 @@ Then open http://localhost:8000 in your browser.
 
 To customise the app content, edit these two files:
 
-- `webapp/static/content/about.md` — article shown in the "About this project" overlay
-- `webapp/static/config.json` — GitHub and LinkedIn URLs shown as icon links in the sidebar
+- `webapp/static/content/about.md` — article shown in the "About this
+  project" overlay
+- `webapp/static/config.json` — GitHub and LinkedIn URLs shown as icon
+  links in the sidebar
 
-**Deployment:** The `webapp/static/` directory is deployed as-is to Cloudflare Pages.
+**Deployment:** The `webapp/static/` directory is deployed as-is to
+Cloudflare Pages.

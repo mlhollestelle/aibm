@@ -39,6 +39,7 @@ notebooks = [
 ]
 pipeline = [
     { name = "geopandas" },
+    { name = "matplotlib" },
     { name = "numpy" },
     { name = "openmatrix" },
     { name = "osmnx" },
@@ -46,6 +47,7 @@ pipeline = [
     { name = "pyogrio" },
     { name = "pyyaml" },
     { name = "requests" },
+    { name = "seaborn" },
     { name = "snakemake" },
 ]
 webapp = [
@@ -80,6 +82,7 @@ notebooks = [
 ]
 pipeline = [
     { name = "geopandas", specifier = ">=1.0" },
+    { name = "matplotlib", specifier = ">=3.9" },
     { name = "numpy", specifier = ">=1.26" },
     { name = "openmatrix", specifier = ">=0.3.5" },
     { name = "osmnx", specifier = ">=2.0" },
@@ -87,6 +90,7 @@ pipeline = [
     { name = "pyogrio", specifier = ">=0.10" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "requests", specifier = ">=2.31" },
+    { name = "seaborn", specifier = ">=0.13" },
     { name = "snakemake", specifier = ">=8.0" },
 ]
 webapp = [
