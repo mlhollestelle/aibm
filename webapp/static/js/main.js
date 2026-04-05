@@ -488,11 +488,23 @@ async function loadData() {
 
   buildSchedules(agentsArr, tripsArr, activitiesArr);
   renderKPIs(tripsArr);
+
+  // Highlight a random agent by default so the user sees that agents
+  // are clickable and gets immediate detail on load.
+  const agentIds = Object.keys(agentSchedules);
+  if (agentIds.length > 0) {
+    selectedAgentId =
+      agentIds[Math.floor(Math.random() * agentIds.length)];
+  }
+
   initControls(updatePositions);
 
   // Hide loading overlay
   const overlay = document.getElementById("loading-overlay");
   if (overlay) overlay.classList.add("hidden");
+
+  // Auto-play on load
+  startPlayback();
 }
 
 function init() {
