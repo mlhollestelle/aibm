@@ -17,20 +17,11 @@ def _deep_merge(base: dict, override: dict) -> dict:
     return result
 
 
-def _resolve_iteration(cfg: dict, iteration_path: Path, config_dir: Path) -> dict:
-    """Merge an iteration YAML (with prompt-config includes) into *cfg*."""
+def _resolve_iteration(cfg: dict, iteration_path: Path) -> dict:
+    """Merge an iteration YAML into *cfg*."""
     with open(iteration_path) as f:
         iter_cfg = yaml.safe_load(f) or {}
 
-    # Resolve include_prompt_configs before other overrides
-    for pc_name in iter_cfg.pop("include_prompt_configs", []):
-        pc_path = config_dir / "prompt_configs" / f"{pc_name}.yaml"
-        with open(pc_path) as f:
-            pc = yaml.safe_load(f) or {}
-        sim = cfg.get("simulation", {})
-        cfg["simulation"] = _deep_merge(sim, pc)
-
-    # Merge remaining iteration overrides (e.g. direct simulation.prompts)
     if iter_cfg:
         cfg = _deep_merge(cfg, iter_cfg)
     return cfg
@@ -97,7 +88,7 @@ def load_config(default: str = "workflow/config.yaml") -> dict:
 
         # 2. Merge iteration config (with prompt-config resolution)
         iteration_path = config_dir / "iterations" / f"{iteration}.yaml"
-        cfg = _resolve_iteration(cfg, iteration_path, config_dir)
+        cfg = _resolve_iteration(cfg, iteration_path)
 
         # 3. Merge policy config (highest priority — overrides everything)
         policy_path = config_dir / "policies" / f"{policy}.yaml"
