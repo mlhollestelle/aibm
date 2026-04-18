@@ -21,6 +21,8 @@ let selectedAgentId = null;
 // Agent currently under the cursor (only used when none is selected)
 let hoveredAgentId = null;
 let tooltipEl = null;
+// Last reasoning shown in the bubble; used to avoid resetting expanded state on each frame
+let lastBubbleReasoning = null;
 
 // ── Data loading ────────────────────────────────────
 
@@ -224,6 +226,7 @@ function updateBubble(lon, lat, reasoning) {
   const el = document.getElementById("mode-bubble");
   if (!reasoning || !deckInstance) {
     el.classList.add("hidden");
+    lastBubbleReasoning = null;
     return;
   }
   const vp = deckInstance.getViewports()[0];
@@ -233,20 +236,30 @@ function updateBubble(lon, lat, reasoning) {
   el.style.top  = y + "px";
 
   const content = el.querySelector(".bubble-content");
-  content.textContent = reasoning;
-  content.classList.remove("expanded");
+
+  // Only reset expanded state when the reasoning text changes (new agent or trip).
+  // Skipping this on every frame prevents the animation loop from collapsing an
+  // already-expanded bubble immediately after the user clicked "Read more".
+  if (reasoning !== lastBubbleReasoning) {
+    content.textContent = reasoning;
+    content.classList.remove("expanded");
+    lastBubbleReasoning = reasoning;
+    const existingBtn = el.querySelector(".bubble-expand");
+    if (existingBtn) existingBtn.textContent = "Read more";
+  }
 
   let btn = el.querySelector(".bubble-expand");
   if (!btn) {
     btn = document.createElement("button");
     btn.className = "bubble-expand";
     el.appendChild(btn);
-    btn.addEventListener("click", () => {
+    btn.textContent = "Read more";
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
       const expanded = content.classList.toggle("expanded");
       btn.textContent = expanded ? "Show less" : "Read more";
     });
   }
-  btn.textContent = "Read more";
 
   el.classList.remove("hidden");
 }
