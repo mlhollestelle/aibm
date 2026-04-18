@@ -344,7 +344,7 @@ body {
   pointer-events: none;
 }
 #mode-bubble .bubble-content.expanded {
-  -webkit-line-clamp: unset;
+  display: block;
   overflow: visible;
 }
 #mode-bubble .bubble-content.expanded::after {
