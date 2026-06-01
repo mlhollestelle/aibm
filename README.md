@@ -99,20 +99,13 @@ uv run python scripts/example.py
 Rough estimates for simulating 200 households (~500 agents) on the
 Walcheren example model:
 
-<<<<<<< Updated upstream | Model | Approximate cost | Notes |
-|-------|-----------------|-------| | `gpt-4o-mini` | ~$0.50–1.00 |
-Recommended for development | | `gemini-2.5-flash-lite` | ~$0.30–0.80 |
-Good budget option | | `gpt-4o` | ~$5–10 | Higher quality, much more
-expensive | | `claude-sonnet-4-20250514` | ~$5–10 | Similar to gpt-4o |
-======= | Model | Approximate cost | Notes | |
--------------------------- | ---------------- |
------------------------------------ | | `gpt-4o-mini` | ~$0.50–1.00 |
-Recommended for development | | `gemini-2.5-flash-lite` | ~$0.20-0.30 |
-Good budget option | | `gpt-4o` | ~$5–10 | Higher quality, much more
-expensive | | `claude-sonnet-4-20250514` | ~$5–10 | Similar to gpt-4o |
-| `claude-haiku` | ~$3.60 | |
-
-> > > > > > > Stashed changes
+| Model                      | Approximate cost | Notes                               |
+| -------------------------- | ---------------- | ----------------------------------- |
+| `gpt-4o-mini`              | ~$0.50–1.00      | Recommended for development         |
+| `gemini-2.5-flash-lite`    | ~$0.20–0.30      | Good budget option                  |
+| `gpt-4o`                   | ~$5–10           | Higher quality, much more expensive |
+| `claude-sonnet-4-20250514` | ~$5–10           | Similar to gpt-4o                   |
+| `claude-haiku`             | ~$3.60           |                                     |
 
 Costs depend on prompt complexity and number of discretionary activities
 generated. The `n_households` setting in `workflow/config.yaml` controls
@@ -218,28 +211,18 @@ and `assign_network` re-run per scenario.
 
 **How it works:**
 
-<<<<<<< Updated upstream
-
-- `workflow/config.yaml` is the base config with a `scenarios:` list
-- Each scenario has a YAML file in `workflow/scenarios/<name>.yaml` that
-  overrides only the `simulation:` block
-- # Scenario outputs are suffixed: `walcheren_assigned_trips_<name>.parquet`
-  | Dimension     | Directory              | Controls                                |
-  | ------------- | ---------------------- | --------------------------------------- |
-  | **Provider**  | `workflow/providers/`  | LLM model, API key, rate limits         |
-  | **Iteration** | `workflow/iterations/` | Prompt variants and simulation settings |
-  | **Policy**    | `workflow/policies/`   | Network/infrastructure interventions    |
-  > > > > > > > Stashed changes
+| Dimension     | Directory              | Controls                                |
+| ------------- | ---------------------- | --------------------------------------- |
+| **Provider**  | `workflow/providers/`  | LLM model, API key, rate limits         |
+| **Iteration** | `workflow/iterations/` | Prompt variants and simulation settings |
+| **Policy**    | `workflow/policies/`   | Network/infrastructure interventions    |
 
 The `baseline` scenario ships with the project and applies no overrides.
 
 **Adding a scenario** (e.g. to test a different model):
 
-<<<<<<< Updated upstream
-
-1. # Create `workflow/scenarios/my_scenario.yaml`:
-   **Active scenarios** are controlled by three lists in
-   `workflow/config.yaml`:
+**Active scenarios** are controlled by three lists in
+`workflow/config.yaml`:
 
 ```yaml
 providers:
@@ -260,16 +243,13 @@ specific iterations via `only_iterations:` in their provider YAML.
 
 1. Create `workflow/iterations/my_variant.yaml` (can override any
    `simulation:` key):
-   > > > > > > > Stashed changes
    ```yaml
    simulation:
      prompts:
        mode_choice:
          instructions: "..."
    ```
-   <<<<<<< Updated upstream
-2. # Add it to `workflow/config.yaml`:
-3. Add `my_variant` to the `iterations:` list in `workflow/config.yaml`.
+2. Add `my_variant` to the `iterations:` list in `workflow/config.yaml`.
 
 #### Adding a policy
 
@@ -278,7 +258,6 @@ or transit config. Any key from `workflow/config.yaml` can be
 overridden.
 
 1. Create `workflow/policies/my_policy.yaml`:
-   > > > > > > > Stashed changes
    ```yaml
    # Example: e-bike adoption raises cycling speed by 30 %
    network:
