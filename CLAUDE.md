@@ -55,20 +55,23 @@ aibm/
   * MapLibre for basemap,
   * deck.gl v9.1.4 — agent/route data layers (ScatterplotLayer, PathLayer)
   * marked.js v12 — renders the about page from Markdown
-  * CartoDB Dark Matter — basemap style
-  * Inter — UI font (Google Fonts)
+  * CartoDB Positron (light) / Dark Matter (dark) — basemap, follows the OS theme
+  * Off Hours design system — tokens in `webapp/static/css/tokens.css`
+    (Bricolage Grotesque, Geist, Geist Mono via Google Fonts)
 
 ### Mode colours
 
-Defined in `webapp/static/js/layers.js` (`MODE_COLORS`). Use these everywhere
-(plots, diagrams, docs) so colours are consistent across the webapp and figures:
+Defined in `webapp/static/js/layers.js` (`MODE_PALETTES`), taken from the
+Off Hours data colours. The light values are canonical: use them everywhere
+(plots, diagrams, docs) so colours are consistent across the webapp and
+figures. The dark values are only for the webapp's dark theme.
 
-| Mode    | Hex       | RGB             |
-|---------|-----------|-----------------|
-| car     | `#2d72d2` | 45, 114, 210    |
-| bike    | `#29a634` | 41, 166, 52     |
-| transit | `#d1980b` | 209, 152, 11    |
-| walk    | `#cd4246` | 205, 66, 70     |
+| Mode    | Light     | RGB             | Dark      |
+|---------|-----------|-----------------|-----------|
+| car     | `#2d5bd0` | 45, 91, 208     | `#86a8ff` |
+| bike    | `#1e6b47` | 30, 107, 71     | `#4cc38a` |
+| transit | `#f2c230` | 242, 194, 48    | `#e8b923` |
+| walk    | `#ff5c93` | 255, 92, 147    | `#ff7faa` |
 
 ## Workflow / example model
 

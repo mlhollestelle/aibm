@@ -19,12 +19,12 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 
-# Matches MODE_COLORS in webapp/static/js/layers.js
+# Matches the light MODE_PALETTES in webapp/static/js/layers.js
 MODE_COLORS: dict[str, str] = {
-    "car": "#2d72d2",
-    "bike": "#29a634",
-    "transit": "#d1980b",
-    "walk": "#cd4246",
+    "car": "#2d5bd0",
+    "bike": "#1e6b47",
+    "transit": "#f2c230",
+    "walk": "#ff5c93",
 }
 
 sys.path.insert(0, str(Path(__file__).parent))
