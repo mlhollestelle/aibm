@@ -224,7 +224,8 @@ function _currentReasoning(sched, time) {
  */
 function updateBubble(lon, lat, reasoning) {
   const el = document.getElementById("mode-bubble");
-  if (!reasoning || !deckInstance) {
+  // getViewports() throws until deck.gl has finished initialising
+  if (!reasoning || !deckInstance || !deckInstance.isInitialized) {
     el.classList.add("hidden");
     lastBubbleReasoning = null;
     return;
