@@ -22,8 +22,7 @@ function _pct(sorted, p) {
 function renderKPIs(trips) {
   const area = document.getElementById("kpi-area");
   if (!trips.length) {
-    area.innerHTML =
-      '<p style="color:#666;font-size:12px">No trip data</p>';
+    area.innerHTML = '<p class="empty-note">No trip data</p>';
     return;
   }
   let html = "";
@@ -43,14 +42,14 @@ function renderModeShare(trips) {
   const total = trips.length;
 
   let html = '<div class="kpi-section">';
-  html += '<div class="kpi-title">Mode share</div>';
+  html += '<div class="oh-label">Mode share</div>';
   html += '<div class="mode-bar">';
 
   for (const mode of MODE_ORDER) {
     const n = counts[mode] || 0;
     if (n === 0) continue;
     const pct = ((n / total) * 100).toFixed(0);
-    const hex = modeColorHex(mode);
+    const hex = `var(--mode-${mode})`;
     html += `<div class="mode-seg" style="` +
       `width:${pct}%;background:${hex}" ` +
       `title="${mode}: ${n} trips (${pct}%)">` +
@@ -64,10 +63,10 @@ function renderModeShare(trips) {
     const n = counts[mode] || 0;
     if (n === 0) continue;
     const pct = ((n / total) * 100).toFixed(0);
-    const hex = modeColorHex(mode);
+    const hex = `var(--mode-${mode})`;
     html += `<span class="mode-chip">` +
       `<span class="chip-dot" style="background:${hex}">` +
-      `</span>${mode} ${pct}%</span>`;
+      `</span>${mode} <span class="pct">${pct}%</span></span>`;
   }
   html += "</div></div>";
   return html;
@@ -96,8 +95,8 @@ function renderDepartureHistogram(trips) {
   );
   const maxCount = Math.max(...Object.values(bins));
 
-  const svgW = 268; // fits side panel
-  const svgH = 80;
+  const svgW = 292; // fits side panel
+  const svgH = 96;
   const barPad = 1;
 
   const numBins = Math.floor(
@@ -120,7 +119,7 @@ function renderDepartureHistogram(trips) {
     bars +=
       `<rect x="${x}" y="${y}" ` +
       `width="${barW}" height="${h}" ` +
-      `fill="#2d72d2" opacity="0.8" rx="1">` +
+      `class="bar" rx="1">` +
       `<title>${formatTime(b)}: ${count} trips</title>` +
       `</rect>`;
   }
@@ -136,16 +135,18 @@ function renderDepartureHistogram(trips) {
       ((m - minBin) / (maxBin - minBin + BIN_WIDTH))
       * svgW;
     labels +=
-      `<text x="${x}" y="${svgH}" ` +
-      `fill="#738091" font-size="9" ` +
+      `<text x="${x}" y="${svgH}" class="axis" ` +
       `text-anchor="middle">${formatTime(m)}</text>`;
   }
+  const baseline =
+    `<line x1="0" y1="${svgH - 13.5}" x2="${svgW}" ` +
+    `y2="${svgH - 13.5}" class="baseline"/>`;
 
   let html = '<div class="kpi-section">';
-  html += '<div class="kpi-title">Trip departures</div>';
+  html += '<div class="oh-label">Trip departures</div>';
   html += `<svg class="hist-svg" width="100%" ` +
     `height="${svgH}" viewBox="0 0 ${svgW} ${svgH}">`;
-  html += bars + labels;
+  html += bars + baseline + labels;
   html += "</svg></div>";
   return html;
 }
@@ -186,10 +187,10 @@ function renderTripLengthDistribution(trips) {
   // Round max up to the next multiple of 5 km (minimum 5)
   const maxDist = Math.max(5, Math.ceil(globalMax / 5) * 5);
 
-  const svgW    = 268;
-  const labelW  = 42;   // pixels reserved for mode labels
+  const svgW    = 292;
+  const labelW  = 56;   // pixels reserved for mode labels
   const chartW  = svgW - labelW;
-  const rowH    = 22;
+  const rowH    = 26;
   const topPad  = 4;
   const axisH   = 14;
   const svgH    = topPad + modes.length * rowH + axisH;
@@ -200,28 +201,27 @@ function renderTripLengthDistribution(trips) {
   modes.forEach((mode, idx) => {
     const { p5, q1, med, q3, p95 } = stats[mode];
     const yc = topPad + idx * rowH + rowH / 2;
-    const hex = modeColorHex(mode);
+    const hex = `var(--mode-${mode})`;
 
     // Mode label
     rows +=
-      `<text x="${labelW - 4}" y="${yc + 4}" ` +
-      `fill="${hex}" font-size="10" text-anchor="end" ` +
-      `font-weight="600">${mode}</text>`;
+      `<text x="${labelW - 8}" y="${yc + 4}" ` +
+      `class="row-label" text-anchor="end">${mode}</text>`;
 
     // Whisker line
     rows +=
       `<line x1="${mapX(p5)}" y1="${yc}" ` +
       `x2="${mapX(p95)}" y2="${yc}" ` +
-      `stroke="${hex}" stroke-width="1.5"/>`;
+      `style="stroke:${hex}" stroke-width="1.5"/>`;
 
     // Whisker end caps
     rows +=
       `<line x1="${mapX(p5)}" y1="${yc - 3}" ` +
       `x2="${mapX(p5)}" y2="${yc + 3}" ` +
-      `stroke="${hex}" stroke-width="1.5"/>` +
+      `style="stroke:${hex}" stroke-width="1.5"/>` +
       `<line x1="${mapX(p95)}" y1="${yc - 3}" ` +
       `x2="${mapX(p95)}" y2="${yc + 3}" ` +
-      `stroke="${hex}" stroke-width="1.5"/>`;
+      `style="stroke:${hex}" stroke-width="1.5"/>`;
 
     // IQR box
     const boxX = mapX(q1);
@@ -229,39 +229,40 @@ function renderTripLengthDistribution(trips) {
     rows +=
       `<rect x="${boxX}" y="${yc - 4}" ` +
       `width="${boxW}" height="8" ` +
-      `fill="${hex}" opacity="0.35" rx="1" ` +
-      `stroke="${hex}" stroke-width="1"/>`;
+      `style="fill:${hex};stroke:${hex}" fill-opacity="0.35" ` +
+      `rx="1" stroke-width="1"/>`;
 
     // Median line
     rows +=
       `<line x1="${mapX(med)}" y1="${yc - 4}" ` +
       `x2="${mapX(med)}" y2="${yc + 4}" ` +
-      `stroke="${hex}" stroke-width="2"/>`;
+      `style="stroke:${hex}" stroke-width="2.5"/>`;
   });
 
   // X-axis labels
   const tickInterval = maxDist <= 10 ? 2 : maxDist <= 30 ? 5 : 10;
   let axisLabels = "";
   const axisY = topPad + modes.length * rowH + axisH - 2;
+  const plotBottom = topPad + modes.length * rowH;
   for (let v = 0; v <= maxDist; v += tickInterval) {
     const x = mapX(v);
     axisLabels +=
-      `<text x="${x}" y="${axisY}" ` +
-      `fill="#738091" font-size="9" ` +
+      `<line x1="${x}" y1="${topPad}" x2="${x}" y2="${plotBottom}" ` +
+      `class="gridline"/>` +
+      `<text x="${x}" y="${axisY}" class="axis" ` +
       `text-anchor="middle">${v}</text>`;
   }
   // Unit label at far right
   axisLabels +=
-    `<text x="${svgW}" y="${axisY}" ` +
-    `fill="#738091" font-size="9" ` +
+    `<text x="${labelW - 8}" y="${axisY}" class="axis" ` +
     `text-anchor="end">km</text>`;
 
   let html = '<div class="kpi-section">';
-  html += '<div class="kpi-title">Trip length (km)</div>';
+  html += '<div class="oh-label">Trip length (km)</div>';
   html +=
     `<svg class="hist-svg" width="100%" height="${svgH}" ` +
     `viewBox="0 0 ${svgW} ${svgH}">`;
-  html += rows + axisLabels;
+  html += axisLabels + rows;
   html += "</svg></div>";
   return html;
 }
