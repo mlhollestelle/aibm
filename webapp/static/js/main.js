@@ -173,9 +173,9 @@ function agentStateAt(sched, time) {
       return {
         lon: act.location[0],
         lat: act.location[1],
-        r: ACTIVITY_COLOR[0],
-        g: ACTIVITY_COLOR[1],
-        b: ACTIVITY_COLOR[2],
+        r: MAP_COLORS.activity[0],
+        g: MAP_COLORS.activity[1],
+        b: MAP_COLORS.activity[2],
         radius: pulse,
         status: "activity",
         activityType: act.type,
@@ -188,9 +188,9 @@ function agentStateAt(sched, time) {
   return {
     lon: home[0],
     lat: home[1],
-    r: HOME_COLOR[0],
-    g: HOME_COLOR[1],
-    b: HOME_COLOR[2],
+    r: MAP_COLORS.home[0],
+    g: MAP_COLORS.home[1],
+    b: MAP_COLORS.home[2],
     radius: 30,
     status: "home",
     agent: agent,
@@ -372,7 +372,8 @@ function renderDetailPanel(agentId) {
   }
 
   const a = sched.agent;
-  let html = `<div class="detail-header">${a.name}</div>`;
+  let html = `<div class="oh-label">Selected agent</div>`;
+  html += `<div class="detail-header">${a.name}</div>`;
   html += `<div class="detail-meta">Age ${a.age}`;
   html += ` &middot; ${a.employment}`;
   if (a.home_name) html += ` &middot; ${a.home_name}`;
@@ -415,23 +416,27 @@ function renderDetailPanel(agentId) {
         : "";
     const timeStr = formatTime(ev.time);
     const modeTag = ev.mode
-      ? ` <span class="tl-mode" style="background:` +
-        modeColorHex(ev.mode) + `">${ev.mode}</span>`
+      ? `<span class="oh-tag"><span class="oh-tag__dot" ` +
+        `style="background:var(--mode-${ev.mode})"></span>` +
+        `${ev.mode}</span>`
       : "";
     const companionTag =
       ev.companions && ev.companions.length
-        ? ` <span class="tl-companion">with ${ev.companions.join(", ")}</span>`
+        ? `<span class="oh-tag">with ${ev.companions.join(", ")}</span>`
         : "";
-    const reasoningHtml = ev.reasoning
-      ? `<span class="tl-reasoning-toggle" onclick="toggleActivityReasoning(this)">reason ▾</span>` +
-        `<div class="tl-reasoning hidden">${ev.reasoning}</div>`
+    const reasoningToggle = ev.reasoning
+      ? `<button type="button" class="tl-reasoning-toggle" ` +
+        `onclick="toggleActivityReasoning(this)">reason ▾</button>`
+      : "";
+    const reasoningBox = ev.reasoning
+      ? `<div class="tl-reasoning hidden">${ev.reasoning}</div>`
       : "";
     html += `<li class="${active}">`;
     html += `<span class="tl-time">${timeStr}</span>`;
     html += `<span class="tl-label">${ev.label}</span>`;
-    html += modeTag;
-    html += companionTag;
-    html += reasoningHtml;
+    html += `<div class="tl-tags">${modeTag}${companionTag}` +
+      `${reasoningToggle}</div>`;
+    html += reasoningBox;
     html += `</li>`;
   }
   html += `</ul>`;
@@ -439,17 +444,10 @@ function renderDetailPanel(agentId) {
 }
 
 function toggleActivityReasoning(toggle) {
-  const box = toggle.nextElementSibling;
+  const box = toggle.closest("li").querySelector(".tl-reasoning");
   const expanded = !box.classList.contains("hidden");
   box.classList.toggle("hidden", expanded);
   toggle.textContent = expanded ? "reason ▾" : "reason ▴";
-}
-
-function modeColorHex(mode) {
-  const c = MODE_COLORS[mode] || MODE_COLORS.car;
-  return "#" + c.map(
-    (v) => v.toString(16).padStart(2, "0")
-  ).join("");
 }
 
 // ── Layer building ──────────────────────────────────
@@ -479,7 +477,8 @@ function rebuildLayers() {
   const routes = selectedRoutes();
   if (routes.length > 0) {
     // Hover preview is slightly more transparent than the click-selected state
-    const routeOpacity = selectedAgentId ? 200 : 130;
+    const routeOpacity = selectedAgentId ? 230 : 150;
+    layers.push(createRouteCasingLayer(routes, routeOpacity));
     layers.push(createRouteLayer(routes, routeOpacity));
   }
   const activities = selectedActivities();
@@ -533,11 +532,30 @@ async function loadData() {
   startPlayback();
 }
 
+// ── Theme ───────────────────────────────────────────
+
+const darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
+
+function currentTheme() {
+  return darkQuery.matches ? "dark" : "light";
+}
+
+/**
+ * Follow the OS colour scheme: swap palettes, basemap and redraw.
+ */
+function onThemeChange() {
+  const theme = currentTheme();
+  applyPalette(theme);
+  if (deckInstance) deckInstance.setProps({ mapStyle: BASEMAPS[theme] });
+  updatePositions(currentTime);
+}
+
 function init() {
+  applyPalette(currentTheme());
+  darkQuery.addEventListener("change", onThemeChange);
   deckInstance = new deck.DeckGL({
     container: "map-container",
-    mapStyle:
-      "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
+    mapStyle: BASEMAPS[currentTheme()],
     initialViewState: INITIAL_VIEW,
     controller: true,
     layers: [],

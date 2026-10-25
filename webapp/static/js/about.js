@@ -63,6 +63,7 @@ function initAbout() {
         a.target = "_blank";
         a.rel = "noopener noreferrer";
         a.title = "GitHub";
+        a.setAttribute("aria-label", "GitHub");
         a.innerHTML = GITHUB_SVG;
         container.appendChild(a);
       }
@@ -72,6 +73,7 @@ function initAbout() {
         a.target = "_blank";
         a.rel = "noopener noreferrer";
         a.title = "LinkedIn";
+        a.setAttribute("aria-label", "LinkedIn");
         a.innerHTML = LINKEDIN_SVG;
         container.appendChild(a);
       }

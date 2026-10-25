@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>AIBM — An LLM-powered agent-based travel demand model</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧠</text></svg>" />
+  <title>aibm · An LLM-powered agent-based travel demand model</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect x='2' y='2' width='28' height='28' rx='8' fill='%23ff5c93'/><circle cx='16' cy='16' r='5' fill='%2316201b'/></svg>" />
 
   <!-- MapLibre GL JS -->
   <link
@@ -16,15 +16,11 @@
   <!-- deck.gl standalone bundle -->
   <script src="https://unpkg.com/deck.gl@9.1.4/dist.min.js"></script>
 
-  <!-- Inter font -->
+  <!-- Off Hours fonts: Bricolage Grotesque, Geist, Geist Mono -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
-    rel="preconnect"
-    href="https://fonts.gstatic.com"
-    crossorigin
-  />
-  <link
-    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+    href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=Geist:wght@400..700&family=Geist+Mono:wght@400..600&display=swap"
     rel="stylesheet"
   />
 
@@ -32,37 +28,39 @@
   <script src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js"></script>
 
   <!-- App styles -->
+  <link rel="stylesheet" href="css/tokens.css" />
+  <link rel="stylesheet" href="css/prose.css" />
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
   <div id="map-container">
     <!-- Loading overlay -->
-    <div id="loading-overlay"><div class="spinner"></div></div>
+    <div id="loading-overlay" class="oh-grid"><div class="spinner"></div></div>
 
     <!-- Map legend -->
     <div id="legend">
       <div class="leg-row">
-        <span class="leg-dot" style="background:#2d72d2"></span>
+        <span class="leg-dot" style="background:var(--mode-car)"></span>
         <span class="leg-label">Car</span>
       </div>
       <div class="leg-row">
-        <span class="leg-dot" style="background:#29a634"></span>
+        <span class="leg-dot" style="background:var(--mode-bike)"></span>
         <span class="leg-label">Bike</span>
       </div>
       <div class="leg-row">
-        <span class="leg-dot" style="background:#d1980b"></span>
+        <span class="leg-dot" style="background:var(--mode-transit)"></span>
         <span class="leg-label">Transit</span>
       </div>
       <div class="leg-row">
-        <span class="leg-dot" style="background:#cd4246"></span>
+        <span class="leg-dot" style="background:var(--mode-walk)"></span>
         <span class="leg-label">Walk</span>
       </div>
       <div class="leg-row">
-        <span class="leg-dot" style="background:#738091"></span>
+        <span class="leg-dot" style="background:var(--map-activity)"></span>
         <span class="leg-label">Activity</span>
       </div>
       <div class="leg-row">
-        <span class="leg-dot" style="background:#404854"></span>
+        <span class="leg-dot" style="background:var(--map-home)"></span>
         <span class="leg-label">Home</span>
       </div>
     </div>
@@ -75,7 +73,7 @@
 
   <!-- Time controls bar -->
   <div id="time-bar">
-    <button id="btn-play" title="Play / Pause">Play</button>
+    <button id="btn-play" class="oh-btn oh-btn--accent" title="Play / Pause">Play</button>
     <select id="select-speed" title="Playback speed">
       <option value="1">1x</option>
       <option value="10" selected>10x</option>
@@ -85,6 +83,7 @@
     <input
       id="slider-time"
       type="range"
+      aria-label="Simulation time"
       min="0"
       max="1440"
       step="1"
@@ -96,14 +95,15 @@
   <div id="side-panel">
     <div id="panel-header">
       <div class="panel-title">
-        <h2>AIBM <span class="alpha-badge">alpha</span></h2>
+        <p class="oh-label">Walcheren · LLM agents</p>
+        <h1 class="app-name">aibm <span class="oh-tag oh-tag--marker">alpha</span></h1>
         <p class="subtitle">An LLM-powered agent-based travel demand model</p>
       </div>
       <div id="social-links"></div>
-      <button id="btn-about">
+      <button id="btn-about" class="oh-btn oh-btn--ghost">
         <span class="label-long">About this project</span><span class="label-short">About</span>
       </button>
-      <button id="btn-panel-toggle" class="mobile-only" aria-label="Expand panel">Stats ▲</button>
+      <button id="btn-panel-toggle" class="oh-btn oh-btn--ghost" aria-label="Expand panel">Stats ▲</button>
     </div>
     <div id="panel-body">
       <div id="kpi-area"></div>
@@ -114,10 +114,10 @@
   <div id="about-overlay" class="hidden" role="dialog" aria-modal="true">
     <div id="about-panel">
       <div id="about-header">
-        <h2>About AIBM</h2>
+        <span class="oh-label">About aibm</span>
         <button id="btn-close-about" aria-label="Close">&times;</button>
       </div>
-      <div id="about-body"></div>
+      <div id="about-body" class="prose"></div>
     </div>
   </div>
 

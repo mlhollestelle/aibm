@@ -3,41 +3,32 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>AIBM — Paper</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧠</text></svg>" />
+  <title>aibm · Paper</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect x='2' y='2' width='28' height='28' rx='8' fill='%23ff5c93'/><circle cx='16' cy='16' r='5' fill='%2316201b'/></svg>" />
 
-  <!-- Inter font -->
+  <!-- Off Hours fonts: Bricolage Grotesque, Geist, Geist Mono -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
-    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+    href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=Geist:wght@400..700&family=Geist+Mono:wght@400..600&display=swap"
     rel="stylesheet"
   />
 
   <!-- marked.js (Markdown renderer) -->
   <script src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js"></script>
 
-  <style>
-    /* Design tokens — kept in sync with style.css */
-    :root {
-      --bg-darkest:  #111418;
-      --bg-panel:    #1c2127;
-      --border-subtle: #2f343c;
-      --accent:      #2d72d2;
-      --accent-hover: #215db0;
-      --accent-highlight: #8abbff;
-      --text-primary: #f6f7f9;
-      --text-muted:  #738091;
-      --text-secondary: #abb3bf;
-      --mono: "SF Mono", "Consolas", monospace;
-    }
+  <link rel="stylesheet" href="css/tokens.css" />
+  <link rel="stylesheet" href="css/prose.css" />
 
+  <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
     html {
-      background: var(--bg-darkest);
-      color: var(--text-primary);
-      font-family: "Inter", -apple-system, system-ui, sans-serif;
+      background: var(--surface);
+      color: var(--ink);
+      font-family: var(--font-sans);
+      font-size: 16px;
+      line-height: 26px;
     }
 
     body {
@@ -50,118 +41,56 @@
     /* ── Top bar ── */
     #top-bar {
       width: 100%;
-      background: var(--bg-panel);
-      border-bottom: 1px solid var(--border-subtle);
-      padding: 12px 24px;
+      border-bottom: 1px solid var(--line);
+      padding: var(--space-4) var(--space-6);
       display: flex;
       align-items: center;
-      gap: 16px;
+      justify-content: space-between;
+      gap: var(--space-4);
     }
 
-    #top-bar a.back-link {
-      color: var(--accent-highlight);
-      text-decoration: none;
+    #top-bar .back-link {
+      font-family: var(--font-mono);
       font-size: 13px;
-      font-weight: 600;
-      display: flex;
-      align-items: center;
-      gap: 6px;
+      color: var(--pink-text);
+      text-decoration: underline;
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
     }
-    #top-bar a.back-link:hover { text-decoration: underline; }
+    #top-bar .back-link:hover { text-decoration-thickness: 2px; }
 
     #top-bar .site-title {
-      font-size: 15px;
+      font-family: var(--font-display);
+      font-size: 24px;
+      line-height: 28px;
       font-weight: 700;
-      color: var(--accent-highlight);
+      letter-spacing: -0.02em;
     }
 
-    /* ── Paper content ── */
     #paper-container {
-      width: min(760px, 92vw);
-      padding: 48px 0 80px;
+      width: min(720px, 100%);
+      padding: var(--space-16) var(--space-4) var(--space-24);
     }
 
-    #paper-body {
-      line-height: 1.7;
-      color: var(--text-secondary);
-    }
+    #paper-loading,
+    .load-error { color: var(--ink-muted); font-size: 14px; }
 
-    /* Markdown typography */
-    #paper-body h1, #paper-body h2, #paper-body h3 {
-      color: var(--text-primary);
-      font-weight: 700;
-      margin-top: 32px;
-      margin-bottom: 10px;
-    }
-    #paper-body h1 { font-size: 24px; margin-top: 0; }
-    #paper-body h2 { font-size: 18px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 6px; }
-    #paper-body h3 { font-size: 15px; }
-    #paper-body p  { margin-bottom: 14px; font-size: 15px; }
-    #paper-body ul, #paper-body ol { padding-left: 22px; margin-bottom: 14px; font-size: 15px; }
-    #paper-body li { margin-bottom: 6px; }
-    #paper-body a  { color: var(--accent-highlight); text-decoration: none; }
-    #paper-body a:hover { text-decoration: underline; }
-    #paper-body strong { color: var(--text-primary); }
-    #paper-body em { color: var(--text-secondary); }
+    :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 
-    #paper-body code {
-      font-family: var(--mono);
-      font-size: 13px;
-      background: var(--bg-panel);
-      border: 1px solid var(--border-subtle);
-      border-radius: 3px;
-      padding: 1px 5px;
-      color: var(--accent-highlight);
-    }
-    #paper-body pre {
-      background: var(--bg-panel);
-      border: 1px solid var(--border-subtle);
-      border-radius: 4px;
-      padding: 14px 18px;
-      overflow-x: auto;
-      margin-bottom: 14px;
-    }
-    #paper-body pre code { background: none; border: none; padding: 0; font-size: 13px; }
-
-    #paper-body hr {
-      border: none;
-      border-top: 1px solid var(--border-subtle);
-      margin: 28px 0;
-    }
-
-    #paper-body table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-bottom: 14px;
-      font-size: 14px;
-    }
-    #paper-body th, #paper-body td {
-      border: 1px solid var(--border-subtle);
-      padding: 8px 12px;
-      text-align: left;
-    }
-    #paper-body th {
-      background: var(--bg-panel);
-      color: var(--text-primary);
-      font-weight: 600;
-    }
-
-    /* ── Loading state ── */
-    #paper-loading {
-      color: var(--text-muted);
-      font-size: 14px;
-      margin-top: 48px;
+    @media (max-width: 768px) {
+      #top-bar { padding: var(--space-3) var(--space-4); }
+      #paper-container { padding-top: var(--space-12); }
     }
   </style>
 </head>
 <body>
   <div id="top-bar">
     <a class="back-link" href="index.html">← Back to map</a>
-    <span class="site-title">AIBM</span>
+    <span class="site-title">aibm</span>
   </div>
 
   <div id="paper-container">
-    <div id="paper-body">
+    <div id="paper-body" class="prose">
       <p id="paper-loading">Loading…</p>
     </div>
   </div>
@@ -176,7 +105,7 @@
         body.innerHTML = marked.parse(md);
       } catch (err) {
         body.innerHTML =
-          '<p style="color:var(--text-muted)">Failed to load paper content.</p>';
+          '<p class="load-error">Failed to load paper content.</p>';
       }
     })();
   </script>
